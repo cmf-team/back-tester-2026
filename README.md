@@ -22,19 +22,25 @@
 └── README.md                   # this README
 ```
 
+## OS
+
+Our primary platform is Linux, but nothing prevents it to be built and run on other OS.
+The following commands are for Linux users.
+Other users are encouraged to add the corresponding instructions for required steps in this README.
+
 ## Build
 
 Install dependencies once:
 
 ```
-sudo apt install -y cmake g++ libtool autoconf lcov
+sudo apt install -y cmake g++
 ```
 
 Build using cmake:
 
 ```
 cmake -B build -S .
-cmake --build build -v -j
+cmake --build build -j
 ```
 
 or
@@ -68,29 +74,6 @@ or
 ```
 build/bin/test/back-tester-tests
 ```
-
-## Coverage
-
-- Build with `-DENABLE_COVERAGE=ON`
-- Run the tests
-- Run
-
-```
-cmake --build build -t coverage
-```
-
-or
-
-```
-pushd build
-lcov --capture --directory ./src  --exclude '/usr/include/*' --exclude '/usr/lib/*' \
-     --exclude '3rdparty/*' --exclude 'build/include/*' --output-file coverage.info
-genhtml coverage.info --output-directory coverage_report | grep % | head -1 | cut -f 4 -d " "
-popd
-```
-
-This will generate html report in build/coverage_report/index.html and will print a single number for
-line number coverage percentage to the stdout.
 
 ## Run
 

@@ -5,7 +5,6 @@
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/Modules)
 
 option(BUILD_TESTS "Build tests" ON)
-option(ENABLE_COVERAGE "Compile with coverage flags" OFF)
 
 # Choose build type
 if(NOT CMAKE_BUILD_TYPE)
@@ -31,7 +30,6 @@ endmacro()
 
 print_message("----------------------------------------")
 print_message("Options:            BUILD_TESTS=${BUILD_TESTS}")
-print_message("Options:            ENABLE_COVERAGE=${ENABLE_COVERAGE}")
 print_message("Build type:         ${CMAKE_BUILD_TYPE}")
 print_message("Build host:         ${BUILD_NODE}")
 print_message("Processor count:    ${PROCESSOR_COUNT}")
@@ -44,7 +42,7 @@ version: ${CMAKE_CXX_COMPILER_VERSION}, launcher: ${CMAKE_CXX_COMPILER_LAUNCHER}
 ###########################################################
 # Compile settings
 
-set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD 20)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "Static libs only" FORCE)
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -61,20 +59,3 @@ add_compile_options(-Werror -Wall -Wextra)
 
 # Include dir
 include_directories(src)
-
-# Coverage options
-if(ENABLE_COVERAGE)
-    add_compile_options(--coverage "-fprofile-filter-files=src/*")
-    add_link_options(--coverage)
-
-    add_custom_target(clean_coverage
-        COMMAND find src/ test/ -name '*.gcno' -o -name '*.gcda' | xargs rm -f nonexistent
-    )
-
-    add_custom_target(coverage
-        COMMAND lcov --capture --directory src --exclude '/usr/include/*' --exclude '/usr/lib/*'
-                     --exclude '3rdparty/*' --exclude 'build/include/*' --ignore-errors unused,unused
-                     --output-file coverage.info
-        COMMAND genhtml coverage.info --output-directory coverage_report | grep '%'
-    )
-endif()

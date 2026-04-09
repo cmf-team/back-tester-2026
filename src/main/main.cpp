@@ -3,7 +3,7 @@
 
 #include "common/BasicTypes.hpp"
 
-#include <print>
+#include <iostream>
 
 using namespace cmf;
 
@@ -11,11 +11,11 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] const char* argv[])
 {
     try
     {
-        std::print("Hell! Oh, world!");
+        std::cout << "Hell! Oh, world!" << std::endl;
     }
     catch (std::exception& ex)
     {
-        std::print(stderr, "Back-tester threw an exception: {}", ex.what());
+        std::cerr << "Back-tester threw an exception: " << ex.what() << std::endl;
         return 1;
     }
 
