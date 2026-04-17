@@ -52,6 +52,7 @@ ExternalProject_Add(
     CMAKE_ARGS ${FORWARDED_CMAKE_ARGS}
     BUILD_COMMAND $(MAKE)
     INSTALL_COMMAND $(MAKE) -s DESTDIR=${DESTDIR} install
+    CONFIGURE_COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_BINARY_DIR}/nlohmann_json-built
 )
 
 set(TGT nlohmann_json-static-lib)
