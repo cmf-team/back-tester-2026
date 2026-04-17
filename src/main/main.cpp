@@ -7,7 +7,6 @@
 
 #include <algorithm>
 #include <chrono>
-#include <cmath>
 #include <cstdio>
 #include <deque>
 #include <filesystem>
@@ -24,7 +23,7 @@ static constexpr std::size_t NODE_QUEUE_CAP     = 4096;
 static constexpr std::size_t DISP_QUEUE_CAP     = 4096;
 static constexpr int         N_PREVIEW           = 10;
 
-static void print_event(const MarketDataEvent& e) {
+static void processMarketDataEvent(const MarketDataEvent& e) {
     std::printf("ts_recv=%ld ts_event=%ld order_id=%lu side=%c price=%.9f size=%u action=%c sym=%s\n",
                 e.ts_recv, e.ts_event, e.order_id, e.side, e.price, e.size, e.action, e.symbol);
 }
@@ -63,9 +62,9 @@ static DispatchResult run_dispatcher(EventQueue& q) {
 static void print_results(const char* label, const DispatchResult& res, double elapsed_sec) {
     std::printf("\n=== %s ===\n", label);
     std::printf("First %d events:\n", N_PREVIEW);
-    for (auto& e : res.first_events) print_event(e);
+    for (auto& e : res.first_events) processMarketDataEvent(e);
     std::printf("Last %d events:\n", N_PREVIEW);
-    for (auto& e : res.last_events) print_event(e);
+    for (auto& e : res.last_events) processMarketDataEvent(e);
     std::printf("Total messages : %zu\n", res.count);
     std::printf("First ts_recv  : %ld\n", res.first_ts);
     std::printf("Last ts_recv   : %ld\n", res.last_ts);
@@ -105,9 +104,9 @@ static void run_standard(const std::filesystem::path& file) {
     }
 
     std::printf("First %d events:\n", N_PREVIEW);
-    for (auto& e : first_events) print_event(e);
+    for (auto& e : first_events) processMarketDataEvent(e);
     std::printf("Last %d events:\n", N_PREVIEW);
-    for (auto& e : last_deq) print_event(e);
+    for (auto& e : last_deq) processMarketDataEvent(e);
     std::printf("Total messages : %zu\n", count);
     std::printf("First ts_recv  : %ld\n", first_ts);
     std::printf("Last ts_recv   : %ld\n", last_ts);
