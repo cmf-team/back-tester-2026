@@ -17,8 +17,8 @@ class SpscQueue {
     struct alignas(64) Atom { std::atomic<std::size_t> v{0}; };
 
     alignas(64) std::array<T, Cap> buf_{};
-    Atom head_{}; // consumer advances
-    Atom tail_{}; // producer advances
+    Atom head_{};
+    Atom tail_{};
 
 public:
     void push(const T& item) noexcept {

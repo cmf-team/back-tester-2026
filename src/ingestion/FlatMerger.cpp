@@ -9,9 +9,7 @@ FlatMerger::FlatMerger(std::vector<EventQueue*> inputs)
 
 void FlatMerger::run() {
     using Slot = std::pair<MarketDataEvent, std::size_t>;
-    auto cmp   = [](const Slot& a, const Slot& b) {
-        return a.first.ts_recv > b.first.ts_recv;
-    };
+    auto cmp   = [](const Slot& a, const Slot& b) { return a.first.ts_recv > b.first.ts_recv; };
     std::priority_queue<Slot, std::vector<Slot>, decltype(cmp)> pq(cmp);
 
     for (std::size_t i = 0; i < inputs_.size(); i++) {
