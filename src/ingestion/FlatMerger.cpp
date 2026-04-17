@@ -4,8 +4,8 @@
 
 namespace cmf {
 
-FlatMerger::FlatMerger(std::vector<EventQueue*> inputs, std::size_t out_cap)
-    : inputs_(std::move(inputs)), output_(out_cap) {}
+FlatMerger::FlatMerger(std::vector<EventQueue*> inputs)
+    : inputs_(std::move(inputs)) {}
 
 void FlatMerger::run() {
     using Slot = std::pair<MarketDataEvent, std::size_t>;
@@ -15,19 +15,23 @@ void FlatMerger::run() {
     std::priority_queue<Slot, std::vector<Slot>, decltype(cmp)> pq(cmp);
 
     for (std::size_t i = 0; i < inputs_.size(); i++) {
-        if (auto opt = inputs_[i]->pop(); opt)
-            pq.emplace(*opt, i);
+        MarketDataEvent e = inputs_[i]->pop();
+        if (e.ts_recv != MarketDataEvent::SENTINEL)
+            pq.emplace(e, i);
     }
 
     while (!pq.empty()) {
         auto [event, idx] = pq.top();
         pq.pop();
-        output_.push(std::make_optional(std::move(event)));
-        if (auto opt = inputs_[idx]->pop(); opt)
-            pq.emplace(*opt, idx);
+        output_.push(event);
+        MarketDataEvent next = inputs_[idx]->pop();
+        if (next.ts_recv != MarketDataEvent::SENTINEL)
+            pq.emplace(next, idx);
     }
 
-    output_.push(std::nullopt);
+    MarketDataEvent sentinel{};
+    sentinel.ts_recv = MarketDataEvent::SENTINEL;
+    output_.push(sentinel);
 }
 
 } // namespace cmf

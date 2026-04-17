@@ -10,7 +10,6 @@
 #include <cstdio>
 #include <deque>
 #include <filesystem>
-#include <fstream>
 #include <memory>
 #include <string>
 #include <thread>
@@ -18,10 +17,7 @@
 
 using namespace cmf;
 
-static constexpr std::size_t PRODUCER_QUEUE_CAP = 4096;
-static constexpr std::size_t NODE_QUEUE_CAP     = 4096;
-static constexpr std::size_t DISP_QUEUE_CAP     = 4096;
-static constexpr int         N_PREVIEW           = 10;
+static constexpr int N_PREVIEW = 10;
 
 static void processMarketDataEvent(const MarketDataEvent& e) {
     std::printf("ts_recv=%ld ts_event=%ld order_id=%lu side=%c price=%.9f size=%u action=%c sym=%s\n",
@@ -29,9 +25,9 @@ static void processMarketDataEvent(const MarketDataEvent& e) {
 }
 
 struct DispatchResult {
-    std::size_t              count     = 0;
-    NanoTime                 first_ts  = 0;
-    NanoTime                 last_ts   = 0;
+    std::size_t              count    = 0;
+    NanoTime                 first_ts = 0;
+    NanoTime                 last_ts  = 0;
     std::vector<MarketDataEvent> first_events;
     std::vector<MarketDataEvent> last_events;
 };
@@ -40,8 +36,10 @@ static DispatchResult run_dispatcher(EventQueue& q) {
     DispatchResult res;
     std::deque<MarketDataEvent> last_buf;
 
-    while (auto opt = q.pop()) {
-        const MarketDataEvent& e = *opt;
+    while (true) {
+        MarketDataEvent e = q.pop();
+        if (e.ts_recv == MarketDataEvent::SENTINEL) break;
+
         if (res.count == 0) res.first_ts = e.ts_recv;
         res.last_ts = e.ts_recv;
 
@@ -89,12 +87,13 @@ static void run_standard(const std::filesystem::path& file) {
     std::vector<MarketDataEvent> first_events;
     std::deque<MarketDataEvent>  last_deq;
 
-    std::ifstream f(file);
-    std::string   line;
-    while (std::getline(f, line)) {
-        auto opt = parse_mbo_line(line);
-        if (!opt) continue;
-        const MarketDataEvent& e = *opt;
+    EventQueue q;
+    Producer   prod(file, q);
+    prod.start();
+
+    while (true) {
+        MarketDataEvent e = q.pop();
+        if (e.ts_recv == MarketDataEvent::SENTINEL) break;
         if (count == 0) first_ts = e.ts_recv;
         last_ts = e.ts_recv;
         if (static_cast<int>(first_events.size()) < N_PREVIEW) first_events.push_back(e);
@@ -102,6 +101,7 @@ static void run_standard(const std::filesystem::path& file) {
         if (static_cast<int>(last_deq.size()) > N_PREVIEW) last_deq.pop_front();
         count++;
     }
+    prod.join();
 
     std::printf("First %d events:\n", N_PREVIEW);
     for (auto& e : first_events) processMarketDataEvent(e);
@@ -120,7 +120,7 @@ static void run_benchmark(const std::vector<std::filesystem::path>& files) {
         ptrs.clear();
         producers.clear();
         for (auto& f : files) {
-            auto& q = queues.emplace_back(std::make_unique<EventQueue>(PRODUCER_QUEUE_CAP));
+            auto& q = queues.emplace_back(std::make_unique<EventQueue>());
             ptrs.push_back(q.get());
             producers.emplace_back(std::make_unique<Producer>(f, *q));
         }
@@ -133,7 +133,7 @@ static void run_benchmark(const std::vector<std::filesystem::path>& files) {
         std::vector<std::unique_ptr<Producer>>   producers;
         make_producers(pqueues, pptrs, producers);
 
-        FlatMerger merger(pptrs, DISP_QUEUE_CAP);
+        FlatMerger merger(pptrs);
 
         for (auto& p : producers) p->start();
 
@@ -157,7 +157,7 @@ static void run_benchmark(const std::vector<std::filesystem::path>& files) {
         std::vector<std::unique_ptr<Producer>>   producers;
         make_producers(pqueues, pptrs, producers);
 
-        HierarchyMerger merger(pptrs, NODE_QUEUE_CAP);
+        HierarchyMerger merger(pptrs);
 
         for (auto& p : producers) p->start();
         merger.start();

@@ -6,83 +6,92 @@
 #include <cstring>
 #include <optional>
 #include <string_view>
+#include <string.h>
 
 namespace cmf {
 
-namespace detail {
-
-inline std::string_view str_val(std::string_view line, std::string_view key) noexcept {
-    auto p = line.find(key);
-    if (p == std::string_view::npos) return {};
-    p += key.size();
-    auto e = line.find('"', p);
-    if (e == std::string_view::npos) return {};
-    return line.substr(p, e - p);
-}
-
-template <typename T>
-inline T num_val(std::string_view line, std::string_view key) noexcept {
-    auto p = line.find(key);
-    if (p == std::string_view::npos) return T{};
-    p += key.size();
-    T v{};
-    std::from_chars(line.data() + p, line.data() + line.size(), v);
-    return v;
-}
-
-} // namespace detail
-
-// Parse one NDJSON line from the Databento MBO schema.
+// Single-pass NDJSON parser for Databento MBO schema.
+// Actual document field order (confirmed from data):
+//   ts_recv -> hd:{ts_event, rtype, publisher_id, instrument_id} ->
+//   action -> side -> price -> size -> channel_id -> order_id ->
+//   flags -> ts_in_delta -> sequence -> symbol
+// memmem advances cursor forward on each call — never rescans from line start.
 inline std::optional<MarketDataEvent> parse_mbo_line(std::string_view line) noexcept {
     if (line.empty() || line.front() != '{') return std::nullopt;
 
+    const char* p   = line.data();
+    const char* end = p + line.size();
+
+    auto skip = [&](std::string_view key) -> bool {
+        const void* found = memmem(p, static_cast<std::size_t>(end - p), key.data(), key.size());
+        if (!found) return false;
+        p = static_cast<const char*>(found) + key.size();
+        return true;
+    };
+
     MarketDataEvent e{};
 
-    auto ts_recv_sv  = detail::str_val(line, R"("ts_recv":")");
-    auto ts_event_sv = detail::str_val(line, R"("ts_event":")");
-    if (ts_recv_sv.empty() || ts_event_sv.empty()) return std::nullopt;
+    if (!skip(R"("ts_recv":")")) return std::nullopt;
+    e.ts_recv = parse_iso8601_ns(std::string_view(p, 30));
+    p += 31; // 30-char timestamp + closing quote
 
-    e.ts_recv       = parse_iso8601_ns(ts_recv_sv);
-    e.ts_event      = parse_iso8601_ns(ts_event_sv);
-    e.rtype         = detail::num_val<uint8_t> (line, R"("rtype":)");
-    e.publisher_id  = detail::num_val<uint32_t>(line, R"("publisher_id":)");
-    e.instrument_id = detail::num_val<uint32_t>(line, R"("instrument_id":)");
-    e.sequence      = detail::num_val<uint32_t>(line, R"("sequence":)");
-    e.size          = detail::num_val<uint32_t>(line, R"("size":)");
-    e.flags         = detail::num_val<uint8_t> (line, R"("flags":)");
-    e.ts_in_delta   = detail::num_val<int32_t> (line, R"("ts_in_delta":)");
-    e.channel_id    = detail::num_val<uint16_t>(line, R"("channel_id":)");
+    if (!skip(R"("ts_event":")")) return std::nullopt;
+    e.ts_event = parse_iso8601_ns(std::string_view(p, 30));
+    p += 31;
 
-    auto oid = detail::str_val(line, R"("order_id":")");
-    if (!oid.empty())
-        std::from_chars(oid.data(), oid.data() + oid.size(), e.order_id);
+    if (!skip(R"("rtype":)")) return std::nullopt;
+    p = std::from_chars(p, end, e.rtype).ptr;
 
-    auto act = detail::str_val(line, R"("action":")");
-    if (!act.empty()) e.action = act[0];
+    if (!skip(R"("publisher_id":)")) return std::nullopt;
+    p = std::from_chars(p, end, e.publisher_id).ptr;
 
-    auto sid = detail::str_val(line, R"("side":")");
-    if (!sid.empty()) e.side = sid[0];
+    if (!skip(R"("instrument_id":)")) return std::nullopt;
+    p = std::from_chars(p, end, e.instrument_id).ptr;
 
-    {
-        auto p = line.find(R"("price":)");
-        if (p != std::string_view::npos) {
-            p += 8;
-            if (line.substr(p, 4) != "null") {
-                auto q = line.find('"', p);
-                if (q != std::string_view::npos) {
-                    auto end = line.find('"', q + 1);
-                    if (end != std::string_view::npos)
-                        std::from_chars(line.data() + q + 1, line.data() + end, e.price);
-                }
-            }
-        }
+    if (!skip(R"("action":")")) return std::nullopt;
+    if (p < end) { e.action = *p; p += 2; }
+
+    if (!skip(R"("side":")")) return std::nullopt;
+    if (p < end) { e.side = *p; p += 2; }
+
+    if (!skip(R"("price":)")) return std::nullopt;
+    if (p + 4 <= end && p[0] == 'n') {
+        p += 4;
+    } else if (p < end && *p == '"') {
+        ++p;
+        const char* q = static_cast<const char*>(memchr(p, '"', static_cast<std::size_t>(end - p)));
+        if (q) { std::from_chars(p, q, e.price); p = q + 1; }
     }
 
-    auto sym = detail::str_val(line, R"("symbol":")");
-    if (!sym.empty()) {
-        std::size_t n = std::min(sym.size(), sizeof(e.symbol) - 1);
-        std::memcpy(e.symbol, sym.data(), n);
-        e.symbol[n] = '\0';
+    if (!skip(R"("size":)")) return std::nullopt;
+    p = std::from_chars(p, end, e.size).ptr;
+
+    if (!skip(R"("channel_id":)")) return std::nullopt;
+    p = std::from_chars(p, end, e.channel_id).ptr;
+
+    if (!skip(R"("order_id":")")) return std::nullopt;
+    {
+        const char* q = static_cast<const char*>(memchr(p, '"', static_cast<std::size_t>(end - p)));
+        if (q) { std::from_chars(p, q, e.order_id); p = q + 1; }
+    }
+
+    if (!skip(R"("flags":)")) return std::nullopt;
+    p = std::from_chars(p, end, e.flags).ptr;
+
+    if (!skip(R"("ts_in_delta":)")) return std::nullopt;
+    p = std::from_chars(p, end, e.ts_in_delta).ptr;
+
+    if (!skip(R"("sequence":)")) return std::nullopt;
+    p = std::from_chars(p, end, e.sequence).ptr;
+
+    if (!skip(R"("symbol":")")) return std::nullopt;
+    {
+        const char* q = static_cast<const char*>(memchr(p, '"', static_cast<std::size_t>(end - p)));
+        if (q) {
+            std::size_t n = std::min<std::size_t>(static_cast<std::size_t>(q - p), sizeof(e.symbol) - 1);
+            std::memcpy(e.symbol, p, n);
+            e.symbol[n] = '\0';
+        }
     }
 
     return e;

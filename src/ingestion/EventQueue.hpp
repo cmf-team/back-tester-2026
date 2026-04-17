@@ -1,11 +1,10 @@
 #pragma once
 
-#include "common/BlockingQueue.hpp"
+#include "common/SpscQueue.hpp"
 #include "common/MarketDataEvent.hpp"
-#include <optional>
 
 namespace cmf {
 
-using EventQueue = BlockingQueue<std::optional<MarketDataEvent>>;
+using EventQueue = SpscQueue<MarketDataEvent>;
 
 } // namespace cmf

@@ -7,12 +7,9 @@
 
 namespace cmf {
 
-// Multi-level binary merge tree.
-// Pairs up inputs at each level, spawning one thread per merge node.
-// output() returns the root queue consumed by the dispatcher.
 class HierarchyMerger {
 public:
-    HierarchyMerger(std::vector<EventQueue*> leaf_inputs, std::size_t node_cap);
+    explicit HierarchyMerger(std::vector<EventQueue*> leaf_inputs);
     ~HierarchyMerger();
 
     void        start();

@@ -24,6 +24,8 @@ struct MarketDataEvent {
     char      side          = 'N';
     char      symbol[66]    = {};
 
+    static constexpr NanoTime SENTINEL = std::numeric_limits<NanoTime>::max();
+
     bool operator<(const MarketDataEvent& o) const noexcept { return ts_recv < o.ts_recv; }
     bool operator>(const MarketDataEvent& o) const noexcept { return ts_recv > o.ts_recv; }
 };
