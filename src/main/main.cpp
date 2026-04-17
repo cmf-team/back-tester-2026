@@ -86,8 +86,8 @@ static std::vector<std::filesystem::path> collect_files(const std::filesystem::p
 static void run_standard(const std::filesystem::path& file) {
     std::size_t count = 0;
     NanoTime    first_ts = 0, last_ts = 0;
-    std::vector<MarketDataEvent> first_events, last_events_buf;
-    std::deque<MarketDataEvent> last_deq;
+    std::vector<MarketDataEvent> first_events;
+    std::deque<MarketDataEvent>  last_deq;
 
     std::ifstream f(file);
     std::string   line;
