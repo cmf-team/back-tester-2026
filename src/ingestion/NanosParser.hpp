@@ -20,7 +20,7 @@ inline NanoTime parse_iso8601_ns(std::string_view s) noexcept {
     const char* p = s.data();
     auto ri = [p](int off, int n) noexcept -> int64_t {
         int64_t v = 0;
-        for (int i = 0; i < n; i++) v = v * 10 + (p[off + i] - '0');
+        for (int i = 0; i < n; i++) v = v * 10 + static_cast<uint8_t>(p[off + i] - '0');
         return v;
     };
 

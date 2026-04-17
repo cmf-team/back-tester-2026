@@ -3,6 +3,7 @@
 namespace cmf {
 
 HierarchyMerger::HierarchyMerger(std::vector<EventQueue*> leaf_inputs) {
+    if (leaf_inputs.empty()) return;
     std::vector<EventQueue*> current = std::move(leaf_inputs);
 
     while (current.size() > 1) {

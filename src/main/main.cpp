@@ -40,6 +40,8 @@ static DispatchResult run_dispatcher(EventQueue& q) {
         MarketDataEvent e = q.pop();
         if (e.ts_recv == MarketDataEvent::SENTINEL) break;
 
+        processMarketDataEvent(e);
+
         if (res.count == 0) res.first_ts = e.ts_recv;
         res.last_ts = e.ts_recv;
 
@@ -94,6 +96,7 @@ static void run_standard(const std::filesystem::path& file) {
     while (true) {
         MarketDataEvent e = q.pop();
         if (e.ts_recv == MarketDataEvent::SENTINEL) break;
+        processMarketDataEvent(e);
         if (count == 0) first_ts = e.ts_recv;
         last_ts = e.ts_recv;
         if (static_cast<int>(first_events.size()) < N_PREVIEW) first_events.push_back(e);
@@ -135,12 +138,12 @@ static void run_benchmark(const std::vector<std::filesystem::path>& files) {
 
         FlatMerger merger(pptrs);
 
+        auto t0 = std::chrono::steady_clock::now();
         for (auto& p : producers) p->start();
 
         DispatchResult res;
         auto disp_thread = std::thread([&] { res = run_dispatcher(merger.output()); });
 
-        auto t0 = std::chrono::steady_clock::now();
         merger.run();
         disp_thread.join();
         auto t1   = std::chrono::steady_clock::now();
@@ -159,12 +162,14 @@ static void run_benchmark(const std::vector<std::filesystem::path>& files) {
 
         HierarchyMerger merger(pptrs);
 
+        auto t0 = std::chrono::steady_clock::now();
         for (auto& p : producers) p->start();
         merger.start();
 
         DispatchResult res;
-        auto t0 = std::chrono::steady_clock::now();
-        res     = run_dispatcher(merger.output());
+        auto disp_thread = std::thread([&] { res = run_dispatcher(merger.output()); });
+
+        disp_thread.join();
         auto t1 = std::chrono::steady_clock::now();
         double dt = std::chrono::duration<double>(t1 - t0).count();
 

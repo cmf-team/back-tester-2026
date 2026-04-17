@@ -32,10 +32,12 @@ inline std::optional<MarketDataEvent> parse_mbo_line(std::string_view line) noex
     MarketDataEvent e{};
 
     if (!skip(R"("ts_recv":")")) return std::nullopt;
+    if (p + 31 > end) return std::nullopt;
     e.ts_recv = parse_iso8601_ns(std::string_view(p, 30));
-    p += 31; // 30-char timestamp + closing quote
+    p += 31;
 
     if (!skip(R"("ts_event":")")) return std::nullopt;
+    if (p + 31 > end) return std::nullopt;
     e.ts_event = parse_iso8601_ns(std::string_view(p, 30));
     p += 31;
 
@@ -49,10 +51,12 @@ inline std::optional<MarketDataEvent> parse_mbo_line(std::string_view line) noex
     p = std::from_chars(p, end, e.instrument_id).ptr;
 
     if (!skip(R"("action":")")) return std::nullopt;
-    if (p < end) { e.action = *p; p += 2; }
+    if (p + 2 > end) return std::nullopt;
+    e.action = *p; p += 2;
 
     if (!skip(R"("side":")")) return std::nullopt;
-    if (p < end) { e.side = *p; p += 2; }
+    if (p + 2 > end) return std::nullopt;
+    e.side = *p; p += 2;
 
     if (!skip(R"("price":)")) return std::nullopt;
     if (p + 4 <= end && p[0] == 'n') {
@@ -61,6 +65,9 @@ inline std::optional<MarketDataEvent> parse_mbo_line(std::string_view line) noex
         ++p;
         const char* q = static_cast<const char*>(memchr(p, '"', static_cast<std::size_t>(end - p)));
         if (q) { std::from_chars(p, q, e.price); p = q + 1; }
+    } else if (p < end) {
+        auto [ptr, ec] = std::from_chars(p, end, e.price);
+        if (ec == std::errc{}) p = ptr;
     }
 
     if (!skip(R"("size":)")) return std::nullopt;
