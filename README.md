@@ -83,6 +83,27 @@ Back-tester:
 build/bin/back-tester
 ```
 
+Smoke test against one real zipped Databento file:
+
+```bash
+python3 scripts/smoke_ingest.py
+```
+
+Benchmark all `.mbo.json` members inside the task zips and write reports:
+
+```bash
+python3 scripts/bench_zip_ingest.py \
+  --csv-out build/bench/ingest.csv \
+  --md-out build/bench/ingest.md
+```
+
+Useful bounded runs:
+
+```bash
+python3 scripts/bench_zip_ingest.py --limit-members 1
+python3 scripts/bench_zip_ingest.py --member-substr 20260406
+```
+
 ## Contributing
 
 Install UV, create a virtual environment, and install the project dependencies:

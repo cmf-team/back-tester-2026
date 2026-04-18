@@ -14,6 +14,24 @@ set(FORWARDED_CMAKE_ARGS
 
 set(DESTDIR "")
 
+function(add_external_install_paths TARGET_NAME)
+    if(EXISTS "${CMAKE_BINARY_DIR}/include")
+        target_include_directories(${TARGET_NAME} SYSTEM PUBLIC INTERFACE
+            "${CMAKE_BINARY_DIR}/include"
+        )
+    endif()
+    if(EXISTS "${CMAKE_BINARY_DIR}/lib")
+        target_link_directories(${TARGET_NAME} PUBLIC INTERFACE
+            "${CMAKE_BINARY_DIR}/lib"
+        )
+    endif()
+    if(EXISTS "${CMAKE_BINARY_DIR}/lib64")
+        target_link_directories(${TARGET_NAME} PUBLIC INTERFACE
+            "${CMAKE_BINARY_DIR}/lib64"
+        )
+    endif()
+endfunction()
+
 # ---------------------------------------------------------------------------------------
 # Catch2 - C++ testing framework
 ExternalProject_Add(
@@ -32,10 +50,32 @@ ExternalProject_Add(
 set(TGT Catch2-static-lib)
 add_library(${TGT} INTERFACE)
 add_dependencies(${TGT} Catch2)
-target_include_directories(${TGT} SYSTEM PUBLIC INTERFACE ${CMAKE_BINARY_DIR}/include)
-target_link_directories(${TGT} PUBLIC INTERFACE ${CMAKE_BINARY_DIR}/lib ${CMAKE_BINARY_DIR}/lib64)
+add_external_install_paths(${TGT})
 target_link_libraries(${TGT} PUBLIC INTERFACE
     $<$<CONFIG:Debug>:-lCatch2Maind -lCatch2d>
     $<$<CONFIG:Release>:-lCatch2Main -lCatch2>
 )
 
+# ---------------------------------------------------------------------------------------
+# simdjson - fast JSON parser, used by the ingest layer
+ExternalProject_Add(
+    simdjson
+    GIT_REPOSITORY https://github.com/simdjson/simdjson.git
+    GIT_TAG v3.10.1
+    GIT_SHALLOW TRUE
+    GIT_PROGRESS TRUE
+    SOURCE_DIR "${CMAKE_SOURCE_DIR}/3rdparty/simdjson"
+    BINARY_DIR "${CMAKE_BINARY_DIR}/3rdparty/simdjson"
+    CMAKE_ARGS ${FORWARDED_CMAKE_ARGS}
+        -DSIMDJSON_DEVELOPER_MODE=OFF
+        -DSIMDJSON_JUST_LIBRARY=ON
+        -DBUILD_SHARED_LIBS=OFF
+    BUILD_COMMAND $(MAKE)
+    INSTALL_COMMAND $(MAKE) -s DESTDIR=${DESTDIR} install
+)
+
+set(TGT simdjson-static-lib)
+add_library(${TGT} INTERFACE)
+add_dependencies(${TGT} simdjson)
+add_external_install_paths(${TGT})
+target_link_libraries(${TGT} PUBLIC INTERFACE -lsimdjson)

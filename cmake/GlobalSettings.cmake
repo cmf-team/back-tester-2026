@@ -57,5 +57,19 @@ add_compile_options($<$<CONFIG:Release>:-O3> $<$<CONFIG:Release>:-DNDEBUG>)
 add_compile_options(-Werror -Wall -Wextra)
 #add_compile_options(-Wfatal-errors -ftemplate-backtrace-limit=0)
 
+# Some Command Line Tools installs ship libc++ headers only inside the SDK.
+# Inject that path when the compiler's default libc++ include dir is empty so
+# both this project and ExternalProject dependencies can still build.
+if(APPLE AND CMAKE_OSX_SYSROOT)
+    get_filename_component(CXX_BIN_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
+    set(CXX_TOOLCHAIN_LIBCXX_DIR "${CXX_BIN_DIR}/../include/c++/v1")
+    set(CXX_SDK_LIBCXX_DIR "${CMAKE_OSX_SYSROOT}/usr/include/c++/v1")
+    if(EXISTS "${CXX_SDK_LIBCXX_DIR}/cassert" AND
+       NOT EXISTS "${CXX_TOOLCHAIN_LIBCXX_DIR}/cassert")
+        string(APPEND CMAKE_CXX_FLAGS " -isystem ${CXX_SDK_LIBCXX_DIR}")
+        print_message("libc++ fallback:    ${CXX_SDK_LIBCXX_DIR}")
+    endif()
+endif()
+
 # Include dir
 include_directories(src)
