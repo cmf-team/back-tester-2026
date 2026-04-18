@@ -1,5 +1,3 @@
-// defines basic types used throught the code
-
 #pragma once
 
 #include <cstdint>
