@@ -42,6 +42,8 @@ version: ${CMAKE_CXX_COMPILER_VERSION}, launcher: ${CMAKE_CXX_COMPILER_LAUNCHER}
 ###########################################################
 # Compile settings
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 set(CMAKE_CXX_STANDARD 20)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "Static libs only" FORCE)
 
