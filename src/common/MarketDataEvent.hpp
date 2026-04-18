@@ -3,6 +3,7 @@
 #include "common/BasicTypes.hpp"
 
 #include <cstdint>
+#include <ostream>
 #include <string>
 
 namespace cmf {
@@ -18,6 +19,38 @@ enum class Action : char {
   Fill = 'F',   // resting order filled (does not affect book)
   None = 'N'    // no book effect, may carry flags or info
 };
+
+inline std::ostream &operator<<(std::ostream &os, Action a) {
+  switch (a) {
+  case Action::Add:
+    return os << "Add";
+  case Action::Modify:
+    return os << "Modify";
+  case Action::Cancel:
+    return os << "Cancel";
+  case Action::Clear:
+    return os << "Clear";
+  case Action::Trade:
+    return os << "Trade";
+  case Action::Fill:
+    return os << "Fill";
+  case Action::None:
+    return os << "None";
+  }
+  return os << "Unknown";
+}
+
+inline std::ostream &operator<<(std::ostream &os, Side s) {
+  switch (s) {
+  case Side::Buy:
+    return os << "Buy";
+  case Side::Sell:
+    return os << "Sell";
+  case Side::None:
+    return os << "None";
+  }
+  return os << "Unknown";
+}
 
 // A single L3 market-by-order event parsed from a Databento NDJSON record.
 // One line of the daily file becomes one MarketDataEvent.
@@ -44,5 +77,13 @@ struct MarketDataEvent {
 
   std::string symbol; // human-readable instrument symbol
 };
+
+inline std::ostream &operator<<(std::ostream &os, const MarketDataEvent &e) {
+  os << "ts_recv=" << e.tsRecv << " ts_event=" << e.tsEvent
+     << " action=" << e.action << " side=" << e.side << " price=" << e.price
+     << " size=" << e.size << " order_id=" << e.orderId
+     << " symbol=" << e.symbol;
+  return os;
+}
 
 } // namespace cmf
