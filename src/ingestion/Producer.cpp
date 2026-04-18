@@ -10,7 +10,10 @@
 namespace cmf {
 
 Producer::Producer(std::filesystem::path file, EventQueue& out)
-    : path_(std::move(file)), out_(out) {}
+    : paths_{std::move(file)}, out_(out) {}
+
+Producer::Producer(std::vector<std::filesystem::path> files, EventQueue& out)
+    : paths_(std::move(files)), out_(out) {}
 
 Producer::~Producer() {
     if (thread_.joinable()) thread_.join();
@@ -24,15 +27,17 @@ void Producer::join() {
     if (thread_.joinable()) thread_.join();
 }
 
-static MarketDataEvent make_sentinel() noexcept {
-    MarketDataEvent s{};
-    s.ts_recv = MarketDataEvent::SENTINEL;
-    return s;
+void Producer::run() {
+    for (const auto& p : paths_) read_file(p);
+
+    MarketDataEvent sentinel{};
+    sentinel.ts_recv = MarketDataEvent::SENTINEL;
+    out_.push(sentinel);
 }
 
-void Producer::run() {
-    const int fd = open(path_.c_str(), O_RDONLY);
-    if (fd < 0) { out_.push(make_sentinel()); return; }
+void Producer::read_file(const std::filesystem::path& path) {
+    const int fd = open(path.c_str(), O_RDONLY);
+    if (fd < 0) return;
 
     struct stat st{};
     fstat(fd, &st);
@@ -42,9 +47,9 @@ void Producer::run() {
 
     void* mapped = mmap(nullptr, sz, PROT_READ, MAP_PRIVATE, fd, 0);
     close(fd);
-    if (mapped == MAP_FAILED) { out_.push(make_sentinel()); return; }
+    if (mapped == MAP_FAILED) return;
 
-    madvise(mapped, sz, MADV_SEQUENTIAL | MADV_WILLNEED);
+    madvise(mapped, sz, MADV_SEQUENTIAL);
 
     const char* data = static_cast<const char*>(mapped);
     const char* end  = data + sz;
@@ -58,7 +63,6 @@ void Producer::run() {
     }
 
     munmap(mapped, sz);
-    out_.push(make_sentinel());
 }
 
 } // namespace cmf

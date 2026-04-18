@@ -12,9 +12,9 @@ public:
     explicit HierarchyMerger(std::vector<EventQueue*> leaf_inputs);
     ~HierarchyMerger();
 
-    void        start();
-    void        join();
-    EventQueue& output() { return *final_queue_; }
+    void start();
+    bool next(MarketDataEvent& out);
+    void join();
 
 private:
     struct MergeSpec {
@@ -28,7 +28,13 @@ private:
     std::vector<std::unique_ptr<EventQueue>> node_queues_;
     std::vector<MergeSpec>                   specs_;
     std::vector<std::thread>                 threads_;
-    EventQueue*                              final_queue_ = nullptr;
+
+    EventQueue*     root_left_  = nullptr;
+    EventQueue*     root_right_ = nullptr;
+    EventQueue*     single_     = nullptr;
+    MarketDataEvent buf_left_{};
+    MarketDataEvent buf_right_{};
+    bool            primed_     = false;
 };
 
 } // namespace cmf

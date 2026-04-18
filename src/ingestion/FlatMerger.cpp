@@ -1,35 +1,38 @@
 #include "ingestion/FlatMerger.hpp"
-#include <queue>
-#include <utility>
 
 namespace cmf {
 
 FlatMerger::FlatMerger(std::vector<EventQueue*> inputs)
-    : inputs_(std::move(inputs)) {}
+    : inputs_(std::move(inputs)) {
+    heads_.resize(inputs_.size());
+    keys_.assign(inputs_.size(), MarketDataEvent::SENTINEL);
+}
 
-void FlatMerger::run() {
-    using Slot = std::pair<MarketDataEvent, std::size_t>;
-    auto cmp   = [](const Slot& a, const Slot& b) { return a.first.ts_recv > b.first.ts_recv; };
-    std::priority_queue<Slot, std::vector<Slot>, decltype(cmp)> pq(cmp);
+void FlatMerger::start() {
+    for (std::size_t i = 0; i < inputs_.size(); ++i) {
+        inputs_[i]->pop(heads_[i]);
+        keys_[i] = heads_[i].ts_recv;
+        if (keys_[i] != MarketDataEvent::SENTINEL) ++live_;
+    }
+}
 
-    for (std::size_t i = 0; i < inputs_.size(); i++) {
-        MarketDataEvent e = inputs_[i]->pop();
-        if (e.ts_recv != MarketDataEvent::SENTINEL)
-            pq.emplace(e, i);
+bool FlatMerger::next(MarketDataEvent& out) {
+    if (live_ == 0) return false;
+
+    const std::size_t n = keys_.size();
+    const NanoTime*   k = keys_.data();
+    std::size_t       min_idx = 0;
+    NanoTime          min_ts  = k[0];
+    for (std::size_t i = 1; i < n; ++i) {
+        NanoTime t = k[i];
+        if (t < min_ts) { min_ts = t; min_idx = i; }
     }
 
-    while (!pq.empty()) {
-        auto [event, idx] = pq.top();
-        pq.pop();
-        output_.push(event);
-        MarketDataEvent next = inputs_[idx]->pop();
-        if (next.ts_recv != MarketDataEvent::SENTINEL)
-            pq.emplace(next, idx);
-    }
-
-    MarketDataEvent sentinel{};
-    sentinel.ts_recv = MarketDataEvent::SENTINEL;
-    output_.push(sentinel);
+    out = heads_[min_idx];
+    inputs_[min_idx]->pop(heads_[min_idx]);
+    keys_[min_idx] = heads_[min_idx].ts_recv;
+    if (heads_[min_idx].ts_recv == MarketDataEvent::SENTINEL) --live_;
+    return true;
 }
 
 } // namespace cmf

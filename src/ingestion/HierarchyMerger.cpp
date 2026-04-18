@@ -4,9 +4,11 @@ namespace cmf {
 
 HierarchyMerger::HierarchyMerger(std::vector<EventQueue*> leaf_inputs) {
     if (leaf_inputs.empty()) return;
+    if (leaf_inputs.size() == 1) { single_ = leaf_inputs[0]; return; }
+
     std::vector<EventQueue*> current = std::move(leaf_inputs);
 
-    while (current.size() > 1) {
+    while (current.size() > 2) {
         std::vector<EventQueue*> next;
         for (std::size_t i = 0; i < current.size(); i += 2) {
             if (i + 1 >= current.size()) {
@@ -20,7 +22,8 @@ HierarchyMerger::HierarchyMerger(std::vector<EventQueue*> leaf_inputs) {
         current = std::move(next);
     }
 
-    final_queue_ = current[0];
+    root_left_  = current[0];
+    root_right_ = current[1];
 }
 
 HierarchyMerger::~HierarchyMerger() {
@@ -37,6 +40,42 @@ void HierarchyMerger::start() {
 void HierarchyMerger::join() {
     for (auto& t : threads_)
         if (t.joinable()) t.join();
+}
+
+bool HierarchyMerger::next(MarketDataEvent& out) {
+    static constexpr NanoTime S = MarketDataEvent::SENTINEL;
+
+    if (single_) {
+        single_->pop(out);
+        return out.ts_recv != S;
+    }
+
+    if (!primed_) {
+        root_left_->pop(buf_left_);
+        root_right_->pop(buf_right_);
+        primed_ = true;
+    }
+
+    if (buf_left_.ts_recv == S && buf_right_.ts_recv == S) return false;
+
+    if (buf_left_.ts_recv == S) {
+        out = buf_right_;
+        root_right_->pop(buf_right_);
+        return true;
+    }
+    if (buf_right_.ts_recv == S) {
+        out = buf_left_;
+        root_left_->pop(buf_left_);
+        return true;
+    }
+    if (buf_left_.ts_recv <= buf_right_.ts_recv) {
+        out = buf_left_;
+        root_left_->pop(buf_left_);
+    } else {
+        out = buf_right_;
+        root_right_->pop(buf_right_);
+    }
+    return true;
 }
 
 void HierarchyMerger::merge_two(EventQueue& left, EventQueue& right, EventQueue& out) {

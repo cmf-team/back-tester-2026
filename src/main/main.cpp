@@ -18,6 +18,7 @@
 using namespace cmf;
 
 static constexpr int N_PREVIEW = 10;
+static bool g_suppress_logs = false;
 
 static void processMarketDataEvent(const MarketDataEvent& e) {
     std::printf("ts_recv=%ld ts_event=%ld order_id=%lu side=%c price=%.9f size=%u action=%c sym=%s\n",
@@ -32,15 +33,17 @@ struct DispatchResult {
     std::vector<MarketDataEvent> last_events;
 };
 
-static DispatchResult run_dispatcher(EventQueue& q) {
+template <typename Merger>
+static DispatchResult run_dispatcher(Merger& merger) {
     DispatchResult res;
-    std::deque<MarketDataEvent> last_buf;
+    res.first_events.reserve(N_PREVIEW);
+    MarketDataEvent ring[N_PREVIEW];
+    std::size_t ring_head = 0;
+    std::size_t ring_len  = 0;
+    MarketDataEvent e;
 
-    while (true) {
-        MarketDataEvent e = q.pop();
-        if (e.ts_recv == MarketDataEvent::SENTINEL) break;
-
-        processMarketDataEvent(e);
+    while (merger.next(e)) {
+        if (!g_suppress_logs) processMarketDataEvent(e);
 
         if (res.count == 0) res.first_ts = e.ts_recv;
         res.last_ts = e.ts_recv;
@@ -48,28 +51,32 @@ static DispatchResult run_dispatcher(EventQueue& q) {
         if (static_cast<int>(res.first_events.size()) < N_PREVIEW)
             res.first_events.push_back(e);
 
-        last_buf.push_back(e);
-        if (static_cast<int>(last_buf.size()) > N_PREVIEW)
-            last_buf.pop_front();
+        ring[(ring_head + ring_len) % N_PREVIEW] = e;
+        if (ring_len < N_PREVIEW) ++ring_len;
+        else ring_head = (ring_head + 1) % N_PREVIEW;
 
         res.count++;
     }
 
-    res.last_events = {last_buf.begin(), last_buf.end()};
+    res.last_events.reserve(ring_len);
+    for (std::size_t i = 0; i < ring_len; ++i)
+        res.last_events.push_back(ring[(ring_head + i) % N_PREVIEW]);
     return res;
 }
 
 static void print_results(const char* label, const DispatchResult& res, double elapsed_sec) {
-    std::printf("\n=== %s ===\n", label);
-    std::printf("First %d events:\n", N_PREVIEW);
-    for (auto& e : res.first_events) processMarketDataEvent(e);
-    std::printf("Last %d events:\n", N_PREVIEW);
-    for (auto& e : res.last_events) processMarketDataEvent(e);
-    std::printf("Total messages : %zu\n", res.count);
-    std::printf("First ts_recv  : %ld\n", res.first_ts);
-    std::printf("Last ts_recv   : %ld\n", res.last_ts);
-    std::printf("Wall time      : %.3f s\n", elapsed_sec);
-    std::printf("Throughput     : %.0f msg/s\n", res.count / elapsed_sec);
+    std::fprintf(stderr, "\n=== %s ===\n", label);
+    if (!g_suppress_logs) {
+        std::fprintf(stderr, "First %d events:\n", N_PREVIEW);
+        for (auto& e : res.first_events) processMarketDataEvent(e);
+        std::fprintf(stderr, "Last %d events:\n", N_PREVIEW);
+        for (auto& e : res.last_events) processMarketDataEvent(e);
+    }
+    std::fprintf(stderr, "Total messages : %zu\n", res.count);
+    std::fprintf(stderr, "First ts_recv  : %ld\n", res.first_ts);
+    std::fprintf(stderr, "Last ts_recv   : %ld\n", res.last_ts);
+    std::fprintf(stderr, "Wall time      : %.3f s\n", elapsed_sec);
+    std::fprintf(stderr, "Throughput     : %.0f msg/s\n", res.count / elapsed_sec);
 }
 
 static std::vector<std::filesystem::path> collect_files(const std::filesystem::path& folder) {
@@ -81,6 +88,40 @@ static std::vector<std::filesystem::path> collect_files(const std::filesystem::p
     }
     std::sort(files.begin(), files.end());
     return files;
+}
+
+// Each inner vector is one logical stream: its files are read sequentially by
+// a single producer. Callers must ensure files within a stream are already
+// sorted by ts_recv (typical for daily Databento files within one instrument folder).
+using StreamList = std::vector<std::vector<std::filesystem::path>>;
+
+static StreamList collect_streams(int argc, const char* argv[]) {
+    StreamList streams;
+
+    std::vector<std::filesystem::path> positional;
+    for (int i = 1; i < argc; ++i) {
+        std::string_view a(argv[i]);
+        if (a == "--suppress-logs") continue;
+        positional.emplace_back(a);
+    }
+
+    if (positional.size() == 1 && std::filesystem::is_directory(positional[0])) {
+        // Single folder: each file is its own stream. Safe default for folders
+        // with overlapping-timestamp files across instruments.
+        for (auto& f : collect_files(positional[0])) streams.push_back({f});
+        return streams;
+    }
+
+    // Multiple args: each directory becomes one chained stream, each file is one stream.
+    for (auto& p : positional) {
+        if (std::filesystem::is_regular_file(p)) {
+            streams.push_back({p});
+        } else if (std::filesystem::is_directory(p)) {
+            auto files = collect_files(p);
+            if (!files.empty()) streams.push_back(std::move(files));
+        }
+    }
+    return streams;
 }
 
 static void run_standard(const std::filesystem::path& file) {
@@ -96,7 +137,7 @@ static void run_standard(const std::filesystem::path& file) {
     while (true) {
         MarketDataEvent e = q.pop();
         if (e.ts_recv == MarketDataEvent::SENTINEL) break;
-        processMarketDataEvent(e);
+        if (!g_suppress_logs) processMarketDataEvent(e);
         if (count == 0) first_ts = e.ts_recv;
         last_ts = e.ts_recv;
         if (static_cast<int>(first_events.size()) < N_PREVIEW) first_events.push_back(e);
@@ -106,26 +147,26 @@ static void run_standard(const std::filesystem::path& file) {
     }
     prod.join();
 
-    std::printf("First %d events:\n", N_PREVIEW);
+    std::fprintf(stderr, "First %d events:\n", N_PREVIEW);
     for (auto& e : first_events) processMarketDataEvent(e);
-    std::printf("Last %d events:\n", N_PREVIEW);
+    std::fprintf(stderr, "Last %d events:\n", N_PREVIEW);
     for (auto& e : last_deq) processMarketDataEvent(e);
-    std::printf("Total messages : %zu\n", count);
-    std::printf("First ts_recv  : %ld\n", first_ts);
-    std::printf("Last ts_recv   : %ld\n", last_ts);
+    std::fprintf(stderr, "Total messages : %zu\n", count);
+    std::fprintf(stderr, "First ts_recv  : %ld\n", first_ts);
+    std::fprintf(stderr, "Last ts_recv   : %ld\n", last_ts);
 }
 
-static void run_benchmark(const std::vector<std::filesystem::path>& files) {
+static void run_benchmark(const StreamList& streams) {
     auto make_producers = [&](std::vector<std::unique_ptr<EventQueue>>& queues,
                               std::vector<EventQueue*>&                  ptrs,
                               std::vector<std::unique_ptr<Producer>>&    producers) {
         queues.clear();
         ptrs.clear();
         producers.clear();
-        for (auto& f : files) {
+        for (auto& stream : streams) {
             auto& q = queues.emplace_back(std::make_unique<EventQueue>());
             ptrs.push_back(q.get());
-            producers.emplace_back(std::make_unique<Producer>(f, *q));
+            producers.emplace_back(std::make_unique<Producer>(stream, *q));
         }
     };
 
@@ -140,12 +181,9 @@ static void run_benchmark(const std::vector<std::filesystem::path>& files) {
 
         auto t0 = std::chrono::steady_clock::now();
         for (auto& p : producers) p->start();
+        merger.start();
 
-        DispatchResult res;
-        auto disp_thread = std::thread([&] { res = run_dispatcher(merger.output()); });
-
-        merger.run();
-        disp_thread.join();
+        DispatchResult res = run_dispatcher(merger);
         auto t1   = std::chrono::steady_clock::now();
         double dt = std::chrono::duration<double>(t1 - t0).count();
 
@@ -166,10 +204,7 @@ static void run_benchmark(const std::vector<std::filesystem::path>& files) {
         for (auto& p : producers) p->start();
         merger.start();
 
-        DispatchResult res;
-        auto disp_thread = std::thread([&] { res = run_dispatcher(merger.output()); });
-
-        disp_thread.join();
+        DispatchResult res = run_dispatcher(merger);
         auto t1 = std::chrono::steady_clock::now();
         double dt = std::chrono::duration<double>(t1 - t0).count();
 
@@ -181,28 +216,40 @@ static void run_benchmark(const std::vector<std::filesystem::path>& files) {
 
 int main(int argc, const char* argv[]) {
     if (argc < 2) {
-        std::fprintf(stderr, "Usage: %s <file.mbo.json | folder>\n", argv[0]);
+        std::fprintf(stderr,
+            "Usage:\n"
+            "  %s <file.mbo.json> [--suppress-logs]          (single file)\n"
+            "  %s <folder1> [folder2 ...] [--suppress-logs]  (each folder = one chained stream)\n",
+            argv[0], argv[0]);
         return 1;
     }
 
-    std::filesystem::path arg = argv[1];
+    for (int i = 1; i < argc; ++i)
+        if (std::string_view(argv[i]) == "--suppress-logs") g_suppress_logs = true;
 
-    if (std::filesystem::is_regular_file(arg)) {
-        run_standard(arg);
+    // Single-file mode: exactly one non-flag arg that is a regular file.
+    int positional_count = 0;
+    std::filesystem::path single_file;
+    for (int i = 1; i < argc; ++i) {
+        std::string_view a(argv[i]);
+        if (a == "--suppress-logs") continue;
+        ++positional_count;
+        single_file = a;
+    }
+    if (positional_count == 1 && std::filesystem::is_regular_file(single_file)) {
+        run_standard(single_file);
         return 0;
     }
 
-    if (std::filesystem::is_directory(arg)) {
-        auto files = collect_files(arg);
-        if (files.empty()) {
-            std::fprintf(stderr, "No .mbo.json files found in %s\n", arg.c_str());
-            return 1;
-        }
-        std::printf("Found %zu files\n", files.size());
-        run_benchmark(files);
-        return 0;
+    StreamList streams = collect_streams(argc, argv);
+    if (streams.empty()) {
+        std::fprintf(stderr, "No valid files or folders provided\n");
+        return 1;
     }
 
-    std::fprintf(stderr, "Not a file or directory: %s\n", arg.c_str());
-    return 1;
+    std::size_t total_files = 0;
+    for (auto& s : streams) total_files += s.size();
+    std::fprintf(stderr, "Streams: %zu (total files: %zu)\n", streams.size(), total_files);
+    run_benchmark(streams);
+    return 0;
 }
