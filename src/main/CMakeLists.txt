@@ -11,4 +11,4 @@ target_link_libraries(${TARGET} PUBLIC
 # executable
 set(TARGET back-tester)
 add_executable(${TARGET} main.cpp)
-target_link_libraries(${TARGET} PUBLIC back-tester-lib)
+target_link_libraries(${TARGET} PUBLIC back-tester-lib back-tester-ingestion)
