@@ -1,6 +1,6 @@
-// tests for MarketDataParser
+// tests for FileMarketDataSource
 
-#include "parser/MarketDataParser.hpp"
+#include "parser/FileMarketDataSource.hpp"
 #include "TempFile.hpp"
 
 #include "catch2/catch_all.hpp"
@@ -31,7 +31,7 @@ constexpr const char* kTradeLine =
 
 TEST_CASE("MarketDataParser parses an Add line", "[MarketDataParser]") {
   const std::string buf = kAddLine;
-  MarketDataParser  p(buf.data(), buf.data() + buf.size());
+  FileMarketDataSource  p(buf.data(), buf.data() + buf.size());
 
   MarketDataEvent ev;
   REQUIRE(p.next(ev));
@@ -65,7 +65,7 @@ TEST_CASE("MarketDataParser parses an Add line", "[MarketDataParser]") {
 
 TEST_CASE("MarketDataParser handles price=null on Clear", "[MarketDataParser]") {
   const std::string buf = kClearLine;
-  MarketDataParser  p(buf.data(), buf.data() + buf.size());
+  FileMarketDataSource  p(buf.data(), buf.data() + buf.size());
 
   MarketDataEvent ev;
   REQUIRE(p.next(ev));
@@ -84,7 +84,7 @@ TEST_CASE("MarketDataParser handles price=null on Clear", "[MarketDataParser]") 
 TEST_CASE("MarketDataParser parses multiple lines in order",
           "[MarketDataParser]") {
   const std::string buf = std::string(kClearLine) + kAddLine + kTradeLine;
-  MarketDataParser  p(buf.data(), buf.data() + buf.size());
+  FileMarketDataSource  p(buf.data(), buf.data() + buf.size());
 
   MarketDataEvent ev;
 
@@ -117,7 +117,7 @@ TEST_CASE("MarketDataParser mmap round-trip via a real file",
     os << kClearLine << kAddLine << kTradeLine;
   }
 
-  MarketDataParser p(tf.getPath());
+  FileMarketDataSource p(tf.getPath());
   MarketDataEvent  ev;
 
   int lines = 0;

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "parser/IMarketDataSource.hpp"
 #include "parser/MarketDataEvent.hpp"
 
 #include <cstddef>
@@ -33,17 +34,17 @@ private:
   int         fd_{-1};
 };
 
-class MarketDataParser {
+class FileMarketDataSource : public IMarketDataSource {
 public:
   // Opens and mmaps the file.
-  explicit MarketDataParser(const std::filesystem::path& path);
+  explicit FileMarketDataSource(const std::filesystem::path& path);
 
   // Parses from an externally-owned buffer (primarily for unit tests).
-  MarketDataParser(const char* begin, const char* end) noexcept;
+  FileMarketDataSource(const char* begin, const char* end) noexcept;
 
   // Parses the next line into `out`. Returns false at EOF.
   // On malformed input behaviour is undefined - intended for trusted vendor data.
-  bool next(MarketDataEvent& out);
+  bool next(MarketDataEvent& out) override;
 
   std::size_t bytesConsumed() const noexcept;
   std::size_t totalBytes() const noexcept;

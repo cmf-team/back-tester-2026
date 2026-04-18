@@ -157,11 +157,12 @@ std::ostream& operator<<(std::ostream& os, const Statistics& s) {
     const std::size_t n = std::min<std::size_t>(10, v.size());
     for (std::size_t i = 0; i < n; ++i) {
       const auto& [id, is] = v[i];
+      const bool has_px = is->min_price <= is->max_price;
       os << "    " << id
          << " [" << is->symbol << "]"
          << " count=" << is->count
-         << " px=[" << formatPrice(is->min_price)
-         << "," << formatPrice(is->max_price) << "]"
+         << " px=[" << (has_px ? formatPrice(is->min_price) : "-")
+         << "," << (has_px ? formatPrice(is->max_price) : "-") << "]"
          << " regressions=" << is->ts_recv_regressions
          << "\n";
     }

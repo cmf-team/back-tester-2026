@@ -1,4 +1,4 @@
-#include "parser/MarketDataParser.hpp"
+#include "parser/FileMarketDataSource.hpp"
 
 #include "common/TimeUtils.hpp"
 
@@ -133,25 +133,25 @@ MappedFile& MappedFile::operator=(MappedFile&& other) noexcept {
 // ---------------------------------------------------------------------------
 // MarketDataParser
 
-MarketDataParser::MarketDataParser(const std::filesystem::path& path)
+FileMarketDataSource::FileMarketDataSource(const std::filesystem::path& path)
     : file_(std::make_unique<MappedFile>(path)) {
   begin_ = file_->data();
   cur_   = begin_;
   end_   = begin_ + file_->size();
 }
 
-MarketDataParser::MarketDataParser(const char* begin, const char* end) noexcept
+FileMarketDataSource::FileMarketDataSource(const char* begin, const char* end) noexcept
     : begin_(begin), cur_(begin), end_(end) {}
 
-std::size_t MarketDataParser::bytesConsumed() const noexcept {
+std::size_t FileMarketDataSource::bytesConsumed() const noexcept {
   return static_cast<std::size_t>(cur_ - begin_);
 }
 
-std::size_t MarketDataParser::totalBytes() const noexcept {
+std::size_t FileMarketDataSource::totalBytes() const noexcept {
   return static_cast<std::size_t>(end_ - begin_);
 }
 
-bool MarketDataParser::next(MarketDataEvent& out) {
+bool FileMarketDataSource::next(MarketDataEvent& out) {
   if (cur_ >= end_) return false;
   const char* p = cur_;
 
