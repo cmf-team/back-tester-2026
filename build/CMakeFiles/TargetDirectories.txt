@@ -1,5 +1,0 @@
-C:/Users/user/PyCharmMiscProject/cmf/back-tester-2026/build/CMakeFiles/back-tester.dir
-C:/Users/user/PyCharmMiscProject/cmf/back-tester-2026/build/CMakeFiles/test_parser.dir
-C:/Users/user/PyCharmMiscProject/cmf/back-tester-2026/build/CMakeFiles/test_summary.dir
-C:/Users/user/PyCharmMiscProject/cmf/back-tester-2026/build/CMakeFiles/edit_cache.dir
-C:/Users/user/PyCharmMiscProject/cmf/back-tester-2026/build/CMakeFiles/rebuild_cache.dir
