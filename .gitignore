@@ -5,6 +5,9 @@ log
 .claude
 CLAUDE.md
 
+# macOS
+.DS_Store
+
 
 ### C++ ###
 # Prerequisites
