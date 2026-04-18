@@ -1,5 +1,7 @@
 #include "parser/MarketDataParser.hpp"
 
+#include "common/TimeUtils.hpp"
+
 #include <cerrno>
 #include <cstring>
 #include <fcntl.h>
@@ -13,45 +15,10 @@ namespace cmf {
 
 namespace {
 
-// Howard Hinnant's civil-date-to-days algorithm: converts a proleptic
-// Gregorian (y, m, d) to days since 1970-01-01. Branchless and constexpr.
-constexpr int64_t daysFromCivil(int y, unsigned m, unsigned d) noexcept {
-  y -= m <= 2;
-  const int      era = (y >= 0 ? y : y - 399) / 400;
-  const unsigned yoe = static_cast<unsigned>(y - era * 400);
-  const unsigned doy = (153u * (m > 2 ? m - 3 : m + 9) + 2u) / 5u + d - 1u;
-  const unsigned doe = yoe * 365u + yoe / 4u - yoe / 100u + doy;
-  return static_cast<int64_t>(era) * 146097LL
-       + static_cast<int64_t>(doe) - 719468LL;
-}
-
-inline uint32_t parse2(const char* p) noexcept {
-  return uint32_t(p[0] - '0') * 10u + uint32_t(p[1] - '0');
-}
-inline uint32_t parse4(const char* p) noexcept {
-  return parse2(p) * 100u + parse2(p + 2);
-}
 inline uint32_t parse9(const char* p) noexcept {
   uint32_t r = 0;
   for (int i = 0; i < 9; ++i) r = r * 10u + uint32_t(p[i] - '0');
   return r;
-}
-
-// Parses "YYYY-MM-DDTHH:MM:SS.nnnnnnnnnZ" (exactly 30 chars) to ns since epoch.
-inline NanoTime parseIsoTs(const char* p) noexcept {
-  const int      year   = static_cast<int>(parse4(p));
-  const unsigned month  = parse2(p + 5);
-  const unsigned day    = parse2(p + 8);
-  const unsigned hour   = parse2(p + 11);
-  const unsigned minute = parse2(p + 14);
-  const unsigned second = parse2(p + 17);
-  const uint32_t nanos  = parse9(p + 20);
-  const int64_t  days   = daysFromCivil(year, month, day);
-  const int64_t  secs   = days * 86400LL
-                        + int64_t(hour) * 3600
-                        + int64_t(minute) * 60
-                        + int64_t(second);
-  return secs * 1'000'000'000LL + int64_t(nanos);
 }
 
 // Parses an unquoted unsigned decimal. Returns cursor past the last digit.
