@@ -19,7 +19,7 @@ add_executable(${TARGET} ${TEST_SRC})
 # Link against the necessary libraries
 target_link_libraries(${TARGET} PRIVATE
     Catch2-static-lib
-    back-tester-common
+    back-tester-lib
 )
 
 # Register the tests with CTest

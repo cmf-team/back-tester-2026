@@ -24,63 +24,60 @@
 
 ## OS
 
-Our primary platform is Linux, but nothing prevents it to be built and run on other OS.
-The following commands are for Linux users.
-Other users are encouraged to add the corresponding instructions for required steps in this README.
+Our primary platform is Linux, but the project also builds and runs on macOS.
 
-## Build
+### Linux
 
 Install dependencies once:
 
-```
+```bash
 sudo apt install -y cmake g++
 ```
 
-Build using cmake:
+### macOS
 
+Install dependencies once via [Homebrew](https://brew.sh):
+
+```bash
+brew install cmake
 ```
-cmake -B build -S .
+
+Xcode Command Line Tools provide the compiler (`clang++`). Install them if you haven't already:
+
+```bash
+xcode-select --install
+```
+
+## Build
+
+```bash
+cmake -B build -S . -DBUILD_TESTS=ON
 cmake --build build -j
-```
-
-or
-
-```
-mkdir -p build
-pushd build
-cmake ..
-make -j VERBOSE=1
-popd
 ```
 
 ## Test
 
-To run unit tests:
-
-```
-ctest --test-dir build -j
+```bash
+ctest --test-dir build --output-on-failure -j
 ```
 
-or
+Or run the test binary directly (supports Catch2 tag filters):
 
-```
-pushd build
-ctest -j
-popd
-```
-
-or
-
-```
-build/bin/test/back-tester-tests
+```bash
+build/bin/test/back-tester-tests                  # all tests
+build/bin/test/back-tester-tests "[BasicTypes]"   # single tag
 ```
 
 ## Run
 
-Back-tester:
-
+```bash
+build/bin/back-tester <path-to-daily-ndjson-file>
 ```
-build/bin/back-tester
+
+Example:
+
+```bash
+build/bin/back-tester data/XEUR-20260409-HTT6HHLT6R/xeur-eobi-20260309.mbo.json
 ```
 
 ## Contributing

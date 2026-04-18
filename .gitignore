@@ -4,7 +4,7 @@ build
 log
 .claude
 CLAUDE.md
-
+data/
 
 ### C++ ###
 # Prerequisites
@@ -279,3 +279,4 @@ __marimo__/
 # Ignore all local history of files
 .history
 .ionide
+.DS_Store
