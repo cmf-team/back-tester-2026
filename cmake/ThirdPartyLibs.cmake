@@ -39,3 +39,23 @@ target_link_libraries(${TGT} PUBLIC INTERFACE
     $<$<CONFIG:Release>:-lCatch2Main -lCatch2>
 )
 
+# ---------------------------------------------------------------------------------------
+# nlohmann/json - JSON for Modern C++ (header-only)
+ExternalProject_Add(
+    nlohmann_json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG v3.11.3
+    GIT_SHALLOW TRUE
+    GIT_PROGRESS TRUE
+    SOURCE_DIR "${CMAKE_SOURCE_DIR}/3rdparty/nlohmann_json"
+    BINARY_DIR "${CMAKE_BINARY_DIR}/3rdparty/nlohmann_json"
+    CMAKE_ARGS ${FORWARDED_CMAKE_ARGS} -DJSON_BuildTests=OFF
+    BUILD_COMMAND $(MAKE)
+    INSTALL_COMMAND $(MAKE) -s DESTDIR=${DESTDIR} install
+)
+
+set(TGT nlohmann-json)
+add_library(${TGT} INTERFACE)
+add_dependencies(${TGT} nlohmann_json)
+target_include_directories(${TGT} SYSTEM PUBLIC INTERFACE ${CMAKE_BINARY_DIR}/include)
+
