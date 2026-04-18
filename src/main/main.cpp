@@ -4,7 +4,6 @@
 
 #include "parser/FileMarketDataSource.hpp"
 #include "parser/FolderMarketDataSource.hpp"
-#include "parser/IMarketDataSource.hpp"
 #include "parser/MarketDataEvent.hpp"
 #include "stats/Statistics.hpp"
 
@@ -13,14 +12,17 @@
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
-#include <memory>
 #include <stdexcept>
 
 using namespace cmf;
 
 namespace {
 
-int runBacktest(IMarketDataSource& src) {
+// Templated on Source so next() resolves statically and the compiler can
+// inline the parse loop. Source must satisfy IMarketDataSource's contract
+// (i.e. expose `bool next(MarketDataEvent&)`).
+template <class Source>
+int runBacktest(Source& src) {
   Statistics      stats;
   MarketDataEvent ev;
 
@@ -30,8 +32,8 @@ int runBacktest(IMarketDataSource& src) {
     stats.onEvent(ev);
     ++events_read;
   }
-  const auto   t1        = std::chrono::steady_clock::now();
-  const double sec       = std::chrono::duration<double>(t1 - t0).count();
+  const auto   t1         = std::chrono::steady_clock::now();
+  const double sec        = std::chrono::duration<double>(t1 - t0).count();
   const double msgs_per_s = sec > 0.0 ? events_read / sec : 0.0;
 
   std::cerr << events_read << " events in "
@@ -40,14 +42,6 @@ int runBacktest(IMarketDataSource& src) {
 
   std::cout << stats;
   return 0;
-}
-
-std::unique_ptr<IMarketDataSource> openSource(const std::filesystem::path& path) {
-  if (std::filesystem::is_directory(path))
-    return std::make_unique<FolderMarketDataSource>(path);
-  if (std::filesystem::is_regular_file(path))
-    return std::make_unique<FileMarketDataSource>(path);
-  throw std::runtime_error("not a file or directory: " + path.string());
 }
 
 } // namespace
@@ -59,8 +53,22 @@ int main(int argc, const char* argv[]) {
                 << " <file-or-folder>\n";
       return 2;
     }
-    auto src = openSource(argv[1]);
-    return runBacktest(*src);
+    const std::filesystem::path path = argv[1];
+
+    if (std::filesystem::is_directory(path)) {
+      FolderMarketDataSource src(path);
+      std::cerr << "parsing folder " << path << " ("
+                << src.files().size() << " file(s))...\n";
+      return runBacktest(src);
+    }
+    if (std::filesystem::is_regular_file(path)) {
+      FileMarketDataSource src(path);
+      std::cerr << "parsing file " << path << " ("
+                << std::filesystem::file_size(path) / (1024 * 1024)
+                << " MiB)...\n";
+      return runBacktest(src);
+    }
+    throw std::runtime_error("not a file or directory: " + path.string());
   } catch (const std::exception& ex) {
     std::cerr << "back-tester: " << ex.what() << std::endl;
     return 1;
