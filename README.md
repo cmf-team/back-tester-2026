@@ -1,84 +1,70 @@
-# CMF Advanced Backtesting Engine for Options
+README.md
+# CMF Backtesting Engine – Task 1 (Data Ingestion)
 
-## Directory structure
+## Overview
 
-```
-.
-├── 3rdparty                    # place holder for 3rd party libraries (downloaded during the build)
-├── build                       # local build tree used by CMake
-├    ├── bin                    # generated binaries
-├    ├── lib                    # generated libs (including those, which are built from 3rd party sources)
-├    ├── cfg                    # generated config files (if any)
-├    └── include                # generated include files (installed during the build for 3rd party sources)
-├── cmake                       # cmake helper scripts
-├── config                      # example config files
-├── scripts                     # shell (and other) maintenance scripts
-├── src                         # source files
-├    ├── common                 # common utility files
-├    ├── ...                    # ...
-├    └── main                   # main() for back-tester app
-├── test                        # unit-tests and other tests
-├── CMakeLists.txt              # main build script
-└── README.md                   # this README
-```
+This project implements the basic data ingestion layer for an event-driven backtester.
 
-## OS
+The program reads a daily NDJSON (JSON Lines) file with market data messages, parses each line into a structured `MarketDataEvent`, and computes summary statistics.
 
-Our primary platform is Linux, but nothing prevents it to be built and run on other OS.
-The following commands are for Linux users.
-Other users are encouraged to add the corresponding instructions for required steps in this README.
+---
 
-## Build
+## Features
 
-Install dependencies once:
+- Read NDJSON files line-by-line
+- Parse JSON messages into `MarketDataEvent`
+- Handle optional fields (e.g. `price = null`)
+- Compute summary statistics:
+  - total number of messages
+  - first timestamp
+  - last timestamp
+- Basic error handling (skip invalid lines)
+- Unit tests for parser and summary
 
-```
-sudo apt install -y cmake g++
-```
+---
 
-Build using cmake:
+## Project Structure
 
-```
-cmake -B build -S .
-cmake --build build -j
-```
 
-or
+src/
+common/
+MarketDataEvent.h
+JsonLineParser.cpp
+Summary.cpp
+main/
+main.cpp
 
-```
-mkdir -p build
-pushd build
-cmake ..
-make -j VERBOSE=1
-popd
-```
+test/
+test_parser.cpp
+test_summary.cpp
 
-## Test
 
-To run unit tests:
+---
 
-```
-ctest --test-dir build -j
-```
+## Build (MSYS2 / MinGW)
 
-or
+```bash
+cmake -B build -S . -G "MinGW Makefiles"
+cmake --build build
+Run
+./build/back-tester.exe data/extracted/xeur-eobi-20260309.mbo.json
 
-```
-pushd build
-ctest -j
-popd
-```
+Output:
 
-or
+=== SUMMARY ===
+Total messages: ...
+First timestamp: ...
+Last timestamp: ...
+Tests
 
-```
-build/bin/test/back-tester-tests
-```
+Run parser test:
 
-## Run
+./build/test_parser.exe
 
-Back-tester:
+Run summary test:
 
-```
-build/bin/back-tester
-```
+./build/test_summary.exe
+Notes
+The program processes the entire file sequentially
+Events are parsed and passed through a simple pipeline
+Detailed event printing is disabled for performance

@@ -1,23 +1,47 @@
-// main function for the back-tester app
-// please, keep it minimalistic
-
-#include "common/BasicTypes.hpp"
-
+#include <fstream>
 #include <iostream>
+#include <string>
 
-using namespace cmf;
+#include "../common/JsonLineParser.h"
+#include "../common/Summary.h"
 
-int main([[maybe_unused]] int argc, [[maybe_unused]] const char* argv[])
-{
-    try
-    {
-        std::cout << "Hell! Oh, world!" << std::endl;
+int main(int argc, char** argv) {
+    std::string file_path;
+
+    if (argc > 1) {
+        file_path = argv[1];
+    } else {
+        std::cout << "Using default folder: data/extracted\n";
+        file_path = "data/extracted/xeur-eobi-20260309.mbo.json";
     }
-    catch (std::exception& ex)
-    {
-        std::cerr << "Back-tester threw an exception: " << ex.what() << std::endl;
+
+    std::ifstream file(file_path);
+    if (!file.is_open()) {
+        std::cerr << "ERROR: cannot open file\n";
         return 1;
     }
+
+    Summary summary;
+
+    std::string line;
+
+    while (std::getline(file, line)) {
+        try {
+            auto event = JsonLineParser::parse(line);
+
+            // ❌ НИЧЕГО НЕ ПЕЧАТАЕМ
+            // processMarketDataEvent(event); ← УДАЛЕНО
+
+            summary.update(event);
+        } catch (...) {
+            // игнор плохих строк
+        }
+    }
+
+    file.close();
+
+    // ✔ ТОЛЬКО SUMMARY
+    summary.print();
 
     return 0;
 }

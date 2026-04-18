@@ -1,5 +1,1 @@
-3rdparty/*
-build
-log
-.claude
-CLAUDE.md
+data/extracted/*.json
