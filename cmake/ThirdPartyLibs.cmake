@@ -14,6 +14,11 @@ set(FORWARDED_CMAKE_ARGS
 
 set(DESTDIR "")
 
+file(MAKE_DIRECTORY
+    "${CMAKE_BINARY_DIR}/include"
+    "${CMAKE_BINARY_DIR}/lib"
+)
+
 function(add_external_install_paths TARGET_NAME)
     target_include_directories(${TARGET_NAME} SYSTEM PUBLIC INTERFACE
         "${CMAKE_BINARY_DIR}/include"
@@ -21,11 +26,6 @@ function(add_external_install_paths TARGET_NAME)
     target_link_directories(${TARGET_NAME} PUBLIC INTERFACE
         "${CMAKE_BINARY_DIR}/lib"
     )
-    if(EXISTS "${CMAKE_BINARY_DIR}/lib64")
-        target_link_directories(${TARGET_NAME} PUBLIC INTERFACE
-            "${CMAKE_BINARY_DIR}/lib64"
-        )
-    endif()
 endfunction()
 
 function(configure_git_or_local_external)

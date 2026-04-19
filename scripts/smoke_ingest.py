@@ -10,10 +10,18 @@ import zipfile
 from pathlib import Path
 
 
+def find_default_inbox(repo_root: Path) -> Path | None:
+    for base in (repo_root, *repo_root.parents):
+        candidate = base / ".axxeny-code" / "tasks" / "001-hw1" / "inbox"
+        if candidate.exists():
+            return candidate
+    return None
+
+
 def parse_args() -> argparse.Namespace:
     repo_root = Path(__file__).resolve().parents[1]
     default_binary = repo_root / "build" / "bin" / "back-tester"
-    default_inbox = repo_root.parents[1] / "tasks" / "001-hw1" / "inbox"
+    default_inbox = find_default_inbox(repo_root)
 
     parser = argparse.ArgumentParser(
         description=(
@@ -51,12 +59,19 @@ def parse_args() -> argparse.Namespace:
         "--task-inbox",
         type=Path,
         default=default_inbox,
-        help="Task inbox holding zip files.",
+        help=(
+            "Directory holding input zip files. Default: auto-detect the repo-local "
+            "task inbox when available."
+        ),
     )
     return parser.parse_args()
 
 
-def pick_zip(task_inbox: Path) -> Path:
+def pick_zip(task_inbox: Path | None) -> Path:
+    if task_inbox is None:
+        raise FileNotFoundError(
+            "No default zip location found. Pass --zip or --task-inbox."
+        )
     candidates = sorted(task_inbox.glob("*.zip"))
     if not candidates:
         raise FileNotFoundError(f"No zip files found in {task_inbox}")

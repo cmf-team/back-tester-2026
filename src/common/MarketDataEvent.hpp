@@ -1,6 +1,4 @@
 // Databento MBO (L3) record, value type fed to processMarketDataEvent().
-// Fields and semantics per
-// .axxeny-code/tasks/001-hw1/inbox-markdowns/documentation.md
 // Comparator used by the hard-variant k-way merger; unused in easy path.
 
 #pragma once
@@ -70,8 +68,8 @@ constexpr std::strong_ordering operator<=>(const MarketDataEvent &a,
   return mdeOrderKey(a) <=> mdeOrderKey(b);
 }
 
-constexpr bool operator==(const MarketDataEvent &a,
-                          const MarketDataEvent &b) noexcept {
+constexpr bool sameOrderKey(const MarketDataEvent &a,
+                            const MarketDataEvent &b) noexcept {
   return mdeOrderKey(a) == mdeOrderKey(b);
 }
 
