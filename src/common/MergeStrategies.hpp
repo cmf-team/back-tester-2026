@@ -117,12 +117,13 @@ public:
 };
 
 // Strategy 1: Flat Merger (k-way merge using single priority queue)
+template <typename Comparator = EventComparator>
 class FlatMerger : public MergeStrategy {
 private:
   std::priority_queue<
       std::pair<MarketDataEvent, std::shared_ptr<EventSource>>,
       std::vector<std::pair<MarketDataEvent, std::shared_ptr<EventSource>>>,
-      EventComparator>
+      Comparator>
       pq_;
 
 public:
@@ -161,6 +162,7 @@ public:
 };
 
 // Strategy 2: Hierarchy Merger (tree-based merge)
+template <typename Comparator = EventComparator>
 class HierarchyMerger : public MergeStrategy {
 private:
   std::shared_ptr<EventSource> root_;
