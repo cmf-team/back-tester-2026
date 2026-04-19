@@ -125,3 +125,23 @@ TEST_CASE("ingestFolder keeps deterministic order for equal event keys",
   REQUIRE(flat_order == expected);
   REQUIRE(hierarchy_order == expected);
 }
+
+TEST_CASE("ingestFolder rejects zero batch_size and zero queue_capacity",
+          "[folder-ingest]") {
+  TempDir dir("back-tester-folder-ingest-zero-opts");
+  writeLines(
+      dir.getPath() / "a.json",
+      {
+          R"({"ts_recv":100,"hd":{"ts_event":100,"rtype":160,"publisher_id":7,"instrument_id":1},"order_id":"1","action":"A","side":"B","price":1,"size":1,"sequence":1})",
+      });
+
+  const auto consumer = [](const MarketDataEvent &) {};
+
+  REQUIRE_THROWS_AS(
+      ingestFolder(dir.getPath(), MergeStrategy::Flat, consumer,
+                   FolderIngestOptions{.queue_capacity = 0}),
+      std::invalid_argument);
+  REQUIRE_THROWS_AS(ingestFolder(dir.getPath(), MergeStrategy::Flat, consumer,
+                                 FolderIngestOptions{.batch_size = 0}),
+                    std::invalid_argument);
+}

@@ -23,6 +23,10 @@ enum class MergeStrategy {
 
 const char *mergeStrategyName(MergeStrategy strategy) noexcept;
 
+// Defaults tuned against the 44-file real Eurex benchmark: 512-event blocks
+// keep per-flush sync overhead low without blowing dispatcher latency, and a
+// 64-block queue is enough to absorb producer jitter without unbounded memory.
+// Zero is rejected (see ingestFolder) so downstream code can assume >= 1.
 struct FolderIngestOptions {
   std::size_t queue_capacity = 64;
   std::size_t batch_size = 512;
@@ -34,7 +38,12 @@ struct FolderIngestStats {
   std::size_t total = 0;
   std::size_t skipped_rtype = 0;
   std::size_t skipped_parse = 0;
+  // Out-of-order count on the merged/dispatched stream — non-zero would
+  // indicate a merge bug, not an input defect.
   std::size_t out_of_order_ts_recv = 0;
+  // Sum of per-producer within-file out-of-order events — diagnostic on
+  // input quality; independent of merge correctness.
+  std::size_t producer_out_of_order_ts_recv = 0;
   std::uint64_t first_ts_recv = UNDEF_TIMESTAMP;
   std::uint64_t last_ts_recv = UNDEF_TIMESTAMP;
   double elapsed_sec = 0.0;

@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cassert>
 #include <chrono>
 #include <compare>
 #include <cstdint>
@@ -146,7 +147,11 @@ public:
     return true;
   }
 
-  const OrderedEvent &current() const noexcept { return current_.events[offset_]; }
+  // Precondition: ensureCurrent() was called and returned true.
+  const OrderedEvent &current() const noexcept {
+    assert(offset_ < current_.events.size());
+    return current_.events[offset_];
+  }
 
   void advance() noexcept { ++offset_; }
 
@@ -351,10 +356,11 @@ FolderIngestStats ingestFolder(const std::filesystem::path &folder,
                                const MarketDataEventConsumer &consumer,
                                FolderIngestOptions options) {
   if (options.queue_capacity == 0) {
-    options.queue_capacity = 1;
+    throw std::invalid_argument(
+        "ingestFolder: queue_capacity must be >= 1");
   }
   if (options.batch_size == 0) {
-    options.batch_size = 1;
+    throw std::invalid_argument("ingestFolder: batch_size must be >= 1");
   }
 
   const auto files = listNdjsonFiles(folder);
@@ -433,6 +439,7 @@ FolderIngestStats ingestFolder(const std::filesystem::path &folder,
   for (const auto &producer : producer_results) {
     stats.skipped_rtype += producer.stats.skipped_rtype;
     stats.skipped_parse += producer.stats.skipped_parse;
+    stats.producer_out_of_order_ts_recv += producer.stats.out_of_order_ts_recv;
   }
   return stats;
 }

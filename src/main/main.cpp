@@ -179,6 +179,8 @@ void printFolderSummary(const FolderIngestStats &stats) {
             << " first_ts_recv=" << stats.first_ts_recv
             << " last_ts_recv=" << stats.last_ts_recv
             << " out_of_order_ts_recv=" << stats.out_of_order_ts_recv
+            << " producer_out_of_order_ts_recv="
+            << stats.producer_out_of_order_ts_recv
             << " elapsed_sec=" << stats.elapsed_sec
             << " msgs_per_sec=" << stats.msgsPerSec() << '\n';
 }
