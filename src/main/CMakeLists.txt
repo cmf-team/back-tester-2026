@@ -8,7 +8,7 @@ target_link_libraries(${TARGET} PUBLIC
     back-tester-common
 )
 
-# executable
+# main executable
 set(TARGET back-tester)
 add_executable(${TARGET} main.cpp)
 target_link_libraries(${TARGET} PUBLIC back-tester-lib)
