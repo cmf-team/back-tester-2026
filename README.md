@@ -83,6 +83,44 @@ Back-tester:
 build/bin/back-tester
 ```
 
+Smoke test against one real zipped Databento file:
+
+```bash
+python3 scripts/smoke_ingest.py --zip /path/to/day.zip
+```
+
+Hard-variant run against an extracted folder of daily JSON files:
+
+```bash
+build/bin/back-tester /path/to/folder --strategy both --preview-limit 10
+```
+
+Benchmark all `.mbo.json` members inside one or more input zips and write reports:
+
+```bash
+python3 scripts/bench_zip_ingest.py \
+  --zip /path/to/day-1.zip \
+  --zip /path/to/day-2.zip \
+  --csv-out build/bench/ingest.csv \
+  --md-out build/bench/ingest.md
+```
+
+Benchmark hard-variant folder ingest for both merge strategies:
+
+```bash
+python3 scripts/bench_folder_ingest.py \
+  --csv-out build/bench/hard_ingest.csv \
+  --md-out build/bench/hard_ingest.md
+```
+
+Useful bounded runs:
+
+```bash
+python3 scripts/bench_zip_ingest.py --task-inbox /path/to/zips --limit-members 1
+python3 scripts/bench_zip_ingest.py --task-inbox /path/to/zips --member-substr 20260406
+python3 scripts/bench_folder_ingest.py --task-inbox /path/to/zips --limit-files 4
+```
+
 ## Contributing
 
 Install UV, create a virtual environment, and install the project dependencies:
