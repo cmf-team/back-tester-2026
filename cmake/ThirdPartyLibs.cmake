@@ -48,11 +48,12 @@ ExternalProject_Add(
     GIT_SHALLOW TRUE
     GIT_PROGRESS TRUE
     SOURCE_DIR "${CMAKE_SOURCE_DIR}/3rdparty/nlohmann_json"
-    BINARY_DIR "${CMAKE_BINARY_DIR}/3rdparty/nlohmann_json"
     CMAKE_ARGS ${FORWARDED_CMAKE_ARGS}
-    BUILD_COMMAND $(MAKE)
-    INSTALL_COMMAND $(MAKE) -s DESTDIR=${DESTDIR} install
-    CONFIGURE_COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_BINARY_DIR}/nlohmann_json-built
+    # Skip build/install for header-only library
+    CONFIGURE_COMMAND ""
+    BUILD_COMMAND ""
+    INSTALL_COMMAND ""
+    UPDATE_COMMAND ""
 )
 
 set(TGT nlohmann_json-static-lib)

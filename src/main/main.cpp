@@ -4,6 +4,7 @@
 #include "common/BasicTypes.hpp"
 #include "common/MarketDataEvent.hpp"
 #include "common/MarketDataParser.hpp"
+#include <chrono>
 #include <deque>
 #include <fstream>
 #include <iostream>
@@ -12,22 +13,23 @@
 using namespace cmf;
 
 void processMarketDataEvent(const MarketDataEvent &event) {
-  std::cout << "sort_ts=" << event.getSortTs()
-            << ", ts_event=" << event.getTsEvent()
-            << ", order_id=" << event.getOrderId()
-            << ", instrument_id=" << event.getInstrumentId()
-            << ", side=" << MarketDataEvent::sideToString(event.getSide())
-            << ", price=" << event.getPrice() << ", size=" << event.getSize()
-            << ", action=" << MarketDataEvent::actionToString(event.getAction())
-            << ", flags=" << static_cast<unsigned>(event.getFlags()) << '\n';
+  std::cout << "sort_ts=" << event.sort_ts << ", ts_event=" << event.ts_event
+            << ", order_id=" << event.order_id
+            << ", instrument_id=" << event.instrument_id
+            << ", side=" << MarketDataEvent::sideToString(event.side)
+            << ", price=" << MarketDataEvent::priceToDouble(event.price)
+            << ", size=" << event.size
+            << ", action=" << MarketDataEvent::actionToString(event.action)
+            << ", flags=" << MarketDataEvent::flagToString(event.flag)
+            << ", rtype=" << MarketDataEvent::rTypeToString(event.rtype)
+            << std::endl;
 }
-#include <iostream>
 
 int main(int argc, const char *argv[]) {
   // 1. Argument Check
   if (argc < 2) {
     std::cerr << "Error: No file path provided.\n";
-    std::cerr << "Usage: ./backtester <path_to_json_file>\n";
+    std::cerr << "Usage: ${BIN}/back-tester <path_to_json_file>\n";
     return 1;
   }
 
@@ -43,14 +45,17 @@ int main(int argc, const char *argv[]) {
   uint64_t first_ts = 0, last_ts = 0;
   std::vector<MarketDataEvent> first_10;
   std::deque<MarketDataEvent> last_10;
+  std::chrono::time_point<std::chrono::steady_clock> start, end;
+  std::size_t totalLineTime = 0;
 
   // 3. Line-by-line Processing
   std::string line;
   while (std::getline(file, line)) {
+    start = std::chrono::steady_clock::now();
     if (line.empty())
       continue;
 
-    auto event_opt = parseLine(line);
+    auto event_opt = parseNDJSON(line);
     if (!event_opt)
       continue;
 
@@ -58,8 +63,8 @@ int main(int argc, const char *argv[]) {
 
     // Collect stats
     if (count == 0)
-      first_ts = ev.getSortTs();
-    last_ts = ev.getSortTs();
+      first_ts = ev.sort_ts;
+    last_ts = ev.sort_ts;
 
     if (first_10.size() < 10)
       first_10.push_back(ev);
@@ -69,6 +74,10 @@ int main(int argc, const char *argv[]) {
 
     // Verification Consumer
     // processMarketDataEvent(ev); // Uncomment to see every message
+    end = std::chrono::steady_clock::now();
+    totalLineTime +=
+        std::chrono::duration_cast<std::chrono::nanoseconds>(end - start)
+            .count();
 
     count++;
   }
@@ -77,20 +86,19 @@ int main(int argc, const char *argv[]) {
   std::cout << "\n--- Objective 1 Verification ---\n";
   std::cout << "First 10 Events:\n";
   for (const auto &e : first_10) {
-    std::cout << "  TS: " << e.getSortTs() << " | ID: " << e.getOrderId()
-              << " | Price: " << e.getPrice() << "\n";
+    processMarketDataEvent(e);
   }
 
   std::cout << "\nLast 10 Events:\n";
   for (const auto &e : last_10) {
-    std::cout << "  TS: " << e.getSortTs() << " | ID: " << e.getOrderId()
-              << " | Price: " << e.getPrice() << "\n";
+    processMarketDataEvent(e);
   }
 
   std::cout << "\nSummary:\n";
   std::cout << "  Total Messages:  " << count << "\n";
   std::cout << "  Start Timestamp: " << first_ts << " ns\n";
   std::cout << "  End Timestamp:   " << last_ts << " ns\n";
+  std::cout << "  Line Reading Time: " << totalLineTime << " ns\n";
 
     return 0;
 }
