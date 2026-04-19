@@ -5,6 +5,7 @@
 #include "ingest/FolderIngest.hpp"
 #include "ingest/NdjsonReader.hpp"
 
+#include <algorithm>
 #include <array>
 #include <charconv>
 #include <cstddef>

@@ -13,6 +13,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
+def find_default_inbox(repo_root: Path) -> Path | None:
+    for base in (repo_root, *repo_root.parents):
+        candidate = base / ".axxeny-code" / "tasks" / "001-hw1" / "inbox"
+        if candidate.exists():
+            return candidate
+    return None
+
+
 @dataclass
 class BenchRow:
     strategy: str
@@ -29,7 +37,7 @@ class BenchRow:
 def parse_args() -> argparse.Namespace:
     repo_root = Path(__file__).resolve().parents[1]
     default_binary = repo_root / "build" / "bin" / "back-tester"
-    default_inbox = repo_root.parents[1] / "tasks" / "001-hw1" / "inbox"
+    default_inbox = find_default_inbox(repo_root)
 
     parser = argparse.ArgumentParser(
         description=(
@@ -51,13 +59,19 @@ def parse_args() -> argparse.Namespace:
         action="append",
         type=Path,
         default=[],
-        help="Zip file to use. Repeatable. Default: all zips in task inbox.",
+        help=(
+            "Zip file to use. Repeatable. Default: all zips in the auto-detected "
+            "task inbox when available."
+        ),
     )
     parser.add_argument(
         "--task-inbox",
         type=Path,
         default=default_inbox,
-        help="Task inbox holding zip files.",
+        help=(
+            "Directory holding input zip files. Default: auto-detect the repo-local "
+            "task inbox when available."
+        ),
     )
     parser.add_argument(
         "--member-substr",
@@ -85,9 +99,13 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def pick_zip_paths(task_inbox: Path, explicit: list[Path]) -> list[Path]:
+def pick_zip_paths(task_inbox: Path | None, explicit: list[Path]) -> list[Path]:
     if explicit:
         return explicit
+    if task_inbox is None:
+        raise FileNotFoundError(
+            "No default zip location found. Pass --zip or --task-inbox."
+        )
     paths = sorted(task_inbox.glob("*.zip"))
     if not paths:
         raise FileNotFoundError(f"No zip files found in {task_inbox}")

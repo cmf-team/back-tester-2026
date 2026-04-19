@@ -86,7 +86,7 @@ build/bin/back-tester
 Smoke test against one real zipped Databento file:
 
 ```bash
-python3 scripts/smoke_ingest.py
+python3 scripts/smoke_ingest.py --zip /path/to/day.zip
 ```
 
 Hard-variant run against an extracted folder of daily JSON files:
@@ -95,10 +95,12 @@ Hard-variant run against an extracted folder of daily JSON files:
 build/bin/back-tester /path/to/folder --strategy both --preview-limit 10
 ```
 
-Benchmark all `.mbo.json` members inside the task zips and write reports:
+Benchmark all `.mbo.json` members inside one or more input zips and write reports:
 
 ```bash
 python3 scripts/bench_zip_ingest.py \
+  --zip /path/to/day-1.zip \
+  --zip /path/to/day-2.zip \
   --csv-out build/bench/ingest.csv \
   --md-out build/bench/ingest.md
 ```
@@ -114,9 +116,9 @@ python3 scripts/bench_folder_ingest.py \
 Useful bounded runs:
 
 ```bash
-python3 scripts/bench_zip_ingest.py --limit-members 1
-python3 scripts/bench_zip_ingest.py --member-substr 20260406
-python3 scripts/bench_folder_ingest.py --limit-files 4
+python3 scripts/bench_zip_ingest.py --task-inbox /path/to/zips --limit-members 1
+python3 scripts/bench_zip_ingest.py --task-inbox /path/to/zips --member-substr 20260406
+python3 scripts/bench_folder_ingest.py --task-inbox /path/to/zips --limit-files 4
 ```
 
 ## Contributing
