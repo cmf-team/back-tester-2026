@@ -48,7 +48,16 @@ struct MarketSecurityIdHash {
     return h1 ^ (h2 << 1);
   }
 };
-
+//Actions
+enum class Action : char {
+    Add    = 'A',
+    Modify = 'M',
+    Cancel = 'C',
+    Clear  = 'R',
+    Trade  = 'T',
+    Fill   = 'F',
+    None   = 'N'
+};
 // Market identifiers
 class MktId {
 public:
