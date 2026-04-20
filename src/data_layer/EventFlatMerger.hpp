@@ -58,6 +58,8 @@ public:
         return true;
     }
 
+    void join() noexcept {}
+
 private:
     static constexpr std::size_t invalid_index() noexcept {
         return std::numeric_limits<std::size_t>::max();
