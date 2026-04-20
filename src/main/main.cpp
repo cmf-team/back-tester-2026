@@ -7,7 +7,7 @@
 using namespace cmf;
 
 int main() {
-    EventQueue q;
+    SpscQueue<MarketDataEvent> q;
     Producer prod("test_data/sample.mbo.json", q);
 
     std::deque<MarketDataEvent> first, last;
