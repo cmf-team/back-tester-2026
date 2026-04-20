@@ -12,7 +12,7 @@
 
 using namespace cmf;
 
-static constexpr const char* DATA_DIR = "data";
+static constexpr const char* DATA_DIR = "test_data";
 
 struct Stats {
     std::size_t messages = 0;
