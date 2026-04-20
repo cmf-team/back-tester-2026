@@ -115,7 +115,7 @@ struct Pipeline {
 };
 
 int main() {
-    const std::filesystem::path DATA_DIR = "data";
+    const std::filesystem::path DATA_DIR = "test_data";
 
     auto files = collect_files(DATA_DIR);
 
