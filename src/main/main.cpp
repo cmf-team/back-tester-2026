@@ -35,7 +35,7 @@ int main() {
     }
 
     // Запускаем мерджер
-    std::vector<EventQueue*> inputs = {&q1, &q2, &q3, &q4};
+    std::vector<SpscQueue<MarketDataEvent>*> inputs = {&q1, &q2, &q3, &q4};
     HierarchyMerger merger(inputs);
     merger.start();
 
