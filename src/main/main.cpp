@@ -1,61 +1,134 @@
 #include "common/MarketDataEvent.hpp"
-#include "common/Queue.hpp"
+#include "data_layer/EventFlatMerger.hpp"
 #include "data_layer/EventHierarchyMerger.hpp"
-#include <iostream>
+#include "data_layer/Producer.hpp"
+
+#include <algorithm>
+#include <chrono>
+#include <cstdio>
+#include <filesystem>
+#include <memory>
 #include <vector>
-#include <cassert>
 
 using namespace cmf;
 
-int main() {
-    // Создаём 4 очереди с перемешанными временными метками
-    SpscQueue<MarketDataEvent> q1, q2, q3, q4;
+static constexpr const char* DATA_DIR = "data";
 
-    // Q1: 100, 500, 900
-    for (auto ts : {100, 500, 900}) {
-        MarketDataEvent e{}; e.ts_recv = ts * 1000; q1.push(e);
-    }
-    // Q2: 200, 600, 1000
-    for (auto ts : {200, 600, 1000}) {
-        MarketDataEvent e{}; e.ts_recv = ts * 1000; q2.push(e);
-    }
-    // Q3: 300, 700, 1100
-    for (auto ts : {300, 700, 1100}) {
-        MarketDataEvent e{}; e.ts_recv = ts * 1000; q3.push(e);
-    }
-    // Q4: 400, 800, 1200
-    for (auto ts : {400, 800, 1200}) {
-        MarketDataEvent e{}; e.ts_recv = ts * 1000; q4.push(e);
+struct Stats {
+    std::size_t messages = 0;
+    double seconds = 0.0;
+};
+
+static std::vector<std::filesystem::path> collect_files(const std::filesystem::path& dir) {
+    std::vector<std::filesystem::path> files;
+
+    for (auto& e : std::filesystem::directory_iterator(dir)) {
+        auto p = e.path();
+        if (p.extension() == ".json" || p.string().ends_with(".mbo.json"))
+            files.push_back(p);
     }
 
-    // SENTINEL в каждую
-    for (auto* q : {&q1, &q2, &q3, &q4}) {
-        MarketDataEvent s{}; s.ts_recv = MarketDataEvent::SENTINEL;
-        q->push(s);
+    std::sort(files.begin(), files.end());
+    return files;
+}
+
+using StreamList = std::vector<std::vector<std::filesystem::path>>;
+
+static StreamList build_streams(const std::vector<std::filesystem::path>& files) {
+    StreamList streams;
+
+    for (auto& f : files) {
+        streams.push_back({f});
     }
 
-    // Запускаем мерджер
-    std::vector<SpscQueue<MarketDataEvent>*> inputs = {&q1, &q2, &q3, &q4};
-    HierarchyMerger merger(inputs);
+    return streams;
+}
+
+struct Pipeline {
+    std::vector<std::unique_ptr<SpscQueue<MarketDataEvent>>> queues;
+    std::vector<SpscQueue<MarketDataEvent>*> ptrs;
+    std::vector<std::unique_ptr<Producer>> producers;
+
+    void build(const StreamList& streams) {
+        queues.clear();
+        ptrs.clear();
+        producers.clear();
+
+        for (auto& s : streams) {
+            auto q = std::make_unique<SpscQueue<MarketDataEvent>>();
+            ptrs.push_back(q.get());
+
+            queues.push_back(std::move(q));
+            producers.emplace_back(std::make_unique<Producer>(s, *queues.back()));
+        }
+    }
+};
+
+static Stats run(auto& merger, std::vector<std::unique_ptr<Producer>>& producers) {
+    for (auto& p : producers) p->start();
     merger.start();
 
-    // Считываем и проверяем порядок
-    std::vector<NanoTime> result;
     MarketDataEvent e;
+    std::size_t count = 0;
+
+    auto t0 = std::chrono::steady_clock::now();
+
     while (merger.next(e)) {
-        result.push_back(e.ts_recv);
+        if (e.ts_recv == MarketDataEvent::SENTINEL)
+            break;
+        ++count;
     }
+
+    auto t1 = std::chrono::steady_clock::now();
+
     merger.join();
+    for (auto& p : producers) p->join();
 
-    // Ожидаемый порядок: 100..1200 с шагом 100
-    for (std::size_t i = 0; i < result.size(); ++i) {
-        assert(result[i] == (100 + i * 100) * 1000);
+    double sec = std::chrono::duration<double>(t1 - t0).count();
+
+    return {count, sec};
+}
+
+static void print(const char* name, const Stats& s) {
+    std::printf("\n=== %s ===\n", name);
+    std::printf("Total messages : %zu\n", s.messages);
+    std::printf("Wall time (s)  : %.6f\n", s.seconds);
+    std::printf("Throughput     : %.0f msg/s\n", s.messages / s.seconds);
+}
+
+int main() {
+    auto files = collect_files(DATA_DIR);
+
+    if (files.empty()) {
+        std::printf("No input files in %s\n", DATA_DIR);
+        return 1;
     }
 
-    std::cout << "HierarchyMerger test passed! Global order preserved.\n";
-    std::cout << "Output: ";
-    for (auto ts : result) std::cout << ts/1000 << " ";
-    std::cout << "\n";
+    std::printf("Files loaded: %zu\n", files.size());
+
+    auto streams = build_streams(files);
+
+    // FlatMerger
+    {
+        Pipeline p;
+        p.build(streams);
+
+        FlatMerger merger(p.ptrs);
+
+        auto stats = run(merger, p.producers);
+        print("FlatMerger", stats);
+    }
+
+    // HierarchyMerger
+    {
+        Pipeline p;
+        p.build(streams);
+
+        HierarchyMerger merger(p.ptrs);
+
+        auto stats = run(merger, p.producers);
+        print("HierarchyMerger", stats);
+    }
 
     return 0;
 }
