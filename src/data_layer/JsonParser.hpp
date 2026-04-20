@@ -4,9 +4,50 @@
 #include <optional>
 #include <charconv>
 #include <string_view>
-#include <string.h>
+#include <cstring>
 
 namespace cmf {
+
+static inline int64_t days_from_civil(int64_t y, int64_t m, int64_t d) noexcept {
+    y -= (m <= 2);
+    int64_t era = (y >= 0 ? y : y - 399) / 400;
+    int64_t yoe = y - era * 400;
+    int64_t doy = (153 * (m + (m <= 2 ? 9 : -3)) + 2) / 5 + d - 1;
+    int64_t doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    return era * 146097 + doe - 719468;
+}
+
+inline NanoTime parse_iso8601_ns(std::string_view s) noexcept {
+    const char* p = s.data();
+
+    auto ri = [&](int off, int n) noexcept -> int64_t {
+        const char* q = p + off;
+        int64_t v = 0;
+        for (int i = 0; i < n; ++i)
+            v = v * 10 + static_cast<uint8_t>(q[i] - '0');
+        return v;
+    };
+
+    int64_t epoch_sec =
+        days_from_civil(ri(0,4), ri(5,2), ri(8,2)) * 86400LL +
+        ri(11,2) * 3600LL +
+        ri(14,2) * 60LL +
+        ri(17,2);
+
+    const char* frac = p + 20;
+    int64_t nanos =
+        (static_cast<int64_t>(frac[0]-'0') * 1000 +
+         static_cast<int64_t>(frac[1]-'0') * 100 +
+         static_cast<int64_t>(frac[2]-'0') * 10 +
+         static_cast<int64_t>(frac[3]-'0')) * 100000LL +
+        (static_cast<int64_t>(frac[4]-'0') * 1000 +
+         static_cast<int64_t>(frac[5]-'0') * 100 +
+         static_cast<int64_t>(frac[6]-'0') * 10 +
+         static_cast<int64_t>(frac[7]-'0')) * 10LL +
+        (frac[8] - '0');
+
+    return static_cast<NanoTime>(epoch_sec) * 1'000'000'000LL + nanos;
+}
 
 inline std::optional<MarketDataEvent> parse_mbo_line(std::string_view line) noexcept {
     if (line.empty() || line.front() != '{') return std::nullopt;
@@ -112,47 +153,6 @@ inline std::optional<MarketDataEvent> parse_mbo_line(std::string_view line) noex
     }
 
     return e;
-}
-
-    static inline int64_t days_from_civil(int64_t y, int64_t m, int64_t d) noexcept {
-    y -= (m <= 2);
-    int64_t era = (y >= 0 ? y : y - 399) / 400;
-    int64_t yoe = y - era * 400;
-    int64_t doy = (153 * (m + (m <= 2 ? 9 : -3)) + 2) / 5 + d - 1;
-    int64_t doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    return era * 146097 + doe - 719468;
-}
-
-    inline NanoTime parse_iso8601_ns(std::string_view s) noexcept {
-    const char* p = s.data();
-
-    auto ri = [&](int off, int n) noexcept -> int64_t {
-        const char* q = p + off;
-        int64_t v = 0;
-        for (int i = 0; i < n; ++i)
-            v = v * 10 + static_cast<uint8_t>(q[i] - '0');
-        return v;
-    };
-
-    int64_t epoch_sec =
-        days_from_civil(ri(0,4), ri(5,2), ri(8,2)) * 86400LL +
-        ri(11,2) * 3600LL +
-        ri(14,2) * 60LL +
-        ri(17,2);
-
-    const char* frac = p + 20;
-    int64_t nanos =
-        (static_cast<int64_t>(frac[0]-'0') * 1000 +
-         static_cast<int64_t>(frac[1]-'0') * 100 +
-         static_cast<int64_t>(frac[2]-'0') * 10 +
-         static_cast<int64_t>(frac[3]-'0')) * 100000LL +
-        (static_cast<int64_t>(frac[4]-'0') * 1000 +
-         static_cast<int64_t>(frac[5]-'0') * 100 +
-         static_cast<int64_t>(frac[6]-'0') * 10 +
-         static_cast<int64_t>(frac[7]-'0')) * 10LL +
-        (frac[8] - '0');
-
-    return static_cast<NanoTime>(epoch_sec) * 1'000'000'000LL + nanos;
 }
 
 } // namespace cmf
