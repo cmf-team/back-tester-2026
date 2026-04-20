@@ -133,7 +133,7 @@ int main() {
         Pipeline p;
         p.build(streams);
 
-        FlatMerger merger(p.ptrs);
+        EventFlatMerger merger(p.ptrs);
         run(merger, p.producers);
     }
 
@@ -142,7 +142,7 @@ int main() {
         Pipeline p;
         p.build(streams);
 
-        HierarchyMerger merger(p.ptrs);
+        EventHierarchyMerger merger(p.ptrs);
         run(merger, p.producers);
     }
 
