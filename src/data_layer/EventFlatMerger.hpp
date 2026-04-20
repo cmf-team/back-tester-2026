@@ -1,7 +1,7 @@
 #pragma once
 #include <vector>
 #include <limits>
-#include "data_layer/Queue.hpp"
+#include "common/Queue.hpp"
 #include "common/MarketDataEvent.hpp"
 
 namespace cmf {
