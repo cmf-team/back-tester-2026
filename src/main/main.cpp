@@ -1,46 +1,65 @@
 #include "common/MarketDataEvent.hpp"
 #include "common/Queue.hpp"
-#include "data_layer/Producer.hpp"
+#include "data_layer/EventFlatMerger.hpp"
 #include <iostream>
-#include <deque>
+#include <vector>
+#include <cassert>
 
 using namespace cmf;
 
 int main() {
-    SpscQueue<MarketDataEvent> q;
-    Producer prod("test_data/sample.mbo.json", q);
+    // Создаём 3 очереди с перемешанными временными метками
+    SpscQueue<MarketDataEvent> q1, q2, q3;
 
-    std::deque<MarketDataEvent> first, last;
-    constexpr int N = 5;
-
-    prod.start();
-
-    while (true) {
-        MarketDataEvent e;
-        q.pop(e);
-        if (e.ts_recv == MarketDataEvent::SENTINEL) break;
-
-        if (first.size() < N) first.push_back(e);
-        last.push_back(e);
-        if (last.size() > N) last.pop_front();
+    // Q1: ts = 100, 400, 700
+    for (auto ts : {100, 400, 700}) {
+        MarketDataEvent e{}; e.ts_recv = ts * 1000;
+        q1.push(e);
+    }
+    // Q2: ts = 200, 500, 800
+    for (auto ts : {200, 500, 800}) {
+        MarketDataEvent e{}; e.ts_recv = ts * 1000;
+        q2.push(e);
+    }
+    // Q3: ts = 300, 600, 900
+    for (auto ts : {300, 600, 900}) {
+        MarketDataEvent e{}; e.ts_recv = ts * 1000;
+        q3.push(e);
     }
 
-    prod.join();
-
-    std::cout << "=== First " << N << " events ===\n";
-    for (const auto& e : first) {
-        std::cout << "ts=" << e.ts_recv
-                  << " sym=" << e.symbol
-                  << " price=" << e.price << "\n";
+    // SENTINEL в каждую очередь
+    for (auto* q : {&q1, &q2, &q3}) {
+        MarketDataEvent s{}; s.ts_recv = MarketDataEvent::SENTINEL;
+        q->push(s);
     }
 
-    std::cout << "\n=== Last " << N << " events ===\n";
-    for (const auto& e : last) {
-        std::cout << "ts=" << e.ts_recv
-                  << " sym=" << e.symbol
-                  << " price=" << e.price << "\n";
+    // Запускаем мерджер
+    std::vector<SpscQueue<MarketDataEvent>*> inputs = {&q1, &q2, &q3};
+    FlatMerger merger(inputs);
+    merger.start();
+
+    // Считываем и проверяем порядок
+    std::vector<NanoTime> result;
+    MarketDataEvent e;
+    while (merger.next(e)) {
+        result.push_back(e.ts_recv);
     }
 
-    std::cout << "\nTotal: " << (first.size() >= N ? first.size() : last.size()) << " events\n";
+    // Ожидаемый порядок: 100,200,300,400,500,600,700,800,900 (в тыс. наносек)
+    std::vector<NanoTime> expected = {
+        100000, 200000, 300000, 400000, 500000,
+        600000, 700000, 800000, 900000
+    };
+
+    assert(result.size() == expected.size());
+    for (std::size_t i = 0; i < result.size(); ++i) {
+        assert(result[i] == expected[i]);
+    }
+
+    std::cout << "FlatMerger test passed! Global order preserved.\n";
+    std::cout << "Output: ";
+    for (auto ts : result) std::cout << ts/1000 << " ";
+    std::cout << "\n";
+
     return 0;
 }
