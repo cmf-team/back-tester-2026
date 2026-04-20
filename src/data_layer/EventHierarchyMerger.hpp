@@ -7,9 +7,9 @@
 
 namespace cmf {
 
-class HierarchyMerger {
+class EventHierarchyMerger {
 public:
-    explicit HierarchyMerger(std::vector<SpscQueue<MarketDataEvent>*> leaf_inputs) {
+    explicit EventHierarchyMerger(std::vector<SpscQueue<MarketDataEvent>*> leaf_inputs) {
         if (leaf_inputs.empty()) return;
 
         if (leaf_inputs.size() == 1) {
@@ -46,7 +46,7 @@ public:
         }
     }
 
-    ~HierarchyMerger() {
+    ~EventHierarchyMerger() {
         join();
     }
 

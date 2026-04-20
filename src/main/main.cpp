@@ -113,7 +113,7 @@ int main() {
         Pipeline p;
         p.build(streams);
 
-        FlatMerger merger(p.ptrs);
+        EventFlatMerger merger(p.ptrs);
 
         auto stats = run(merger, p.producers);
         print("FlatMerger", stats);
@@ -124,7 +124,7 @@ int main() {
         Pipeline p;
         p.build(streams);
 
-        HierarchyMerger merger(p.ptrs);
+        EventHierarchyMerger merger(p.ptrs);
 
         auto stats = run(merger, p.producers);
         print("HierarchyMerger", stats);
