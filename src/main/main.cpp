@@ -1,37 +1,45 @@
 #include "common/MarketDataEvent.hpp"
-#include "data_layer/JsonParser.hpp"
+#include "common/Queue.hpp"
+#include "data_layer/Producer.hpp"
 #include <iostream>
-#include <cassert>
-#include <cmath>
-#include <cstring>
+#include <deque>
 
 using namespace cmf;
 
 int main() {
-    std::string_view valid = R"({"ts_recv":"2026-04-06T18:53:11.430340287Z","ts_event":"2026-04-06T18:53:11.430338519Z","rtype":160,"publisher_id":101,"instrument_id":33974,"action":"R","side":"N","price":null,"size":0,"channel_id":79,"order_id":"0","flags":128,"ts_in_delta":1768,"sequence":0,"symbol":"TEST"})";
+    EventQueue q;
+    Producer prod("test_data/sample.mbo.json", q);
 
-    auto ev = parse_mbo_line(valid);
-    assert(ev.has_value());
-    assert(ev->rtype == 160);
-    assert(ev->action == 'R');
-    assert(std::isnan(ev->price));
-    assert(std::strcmp(ev->symbol, "TEST") == 0);
+    std::deque<MarketDataEvent> first, last;
+    constexpr int N = 5;
 
-    std::string_view invalid_input = "not json";
-    auto invalid = parse_mbo_line(invalid_input);
-    assert(!invalid.has_value());
+    prod.start();
 
-    std::string_view with_price = R"({"ts_recv":"2026-04-06T18:53:11.430340287Z","ts_event":"2026-04-06T18:53:11.430338519Z","rtype":160,"publisher_id":101,"instrument_id":33974,"action":"A","side":"B","price":150.25,"size":100,"channel_id":79,"order_id":"123","flags":0,"ts_in_delta":0,"sequence":1,"symbol":"AAPL"})";
+    while (true) {
+        MarketDataEvent e = q.pop();
+        if (e.ts_recv == MarketDataEvent::SENTINEL) break;
 
-    auto ev2 = parse_mbo_line(with_price);
-    assert(ev2.has_value());
-    assert(ev2->price == 150.25);
-    assert(ev2->size == 100);
+        if (first.size() < N) first.push_back(e);
+        last.push_back(e);
+        if (last.size() > N) last.pop_front();
+    }
 
-    (void)ev;
-    (void)invalid;
-    (void)ev2;
+    prod.join();
 
-    std::cout << "All parser tests passed!\n";
+    std::cout << "=== First " << N << " events ===\n";
+    for (const auto& e : first) {
+        std::cout << "ts=" << e.ts_recv
+                  << " sym=" << e.symbol
+                  << " price=" << e.price << "\n";
+    }
+
+    std::cout << "\n=== Last " << N << " events ===\n";
+    for (const auto& e : last) {
+        std::cout << "ts=" << e.ts_recv
+                  << " sym=" << e.symbol
+                  << " price=" << e.price << "\n";
+    }
+
+    std::cout << "\nTotal: " << (first.size() >= N ? first.size() : last.size()) << " events\n";
     return 0;
 }
