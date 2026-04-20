@@ -16,7 +16,8 @@ int main() {
     prod.start();
 
     while (true) {
-        MarketDataEvent e = q.pop();
+        MarketDataEvent e;
+        q.pop(e);
         if (e.ts_recv == MarketDataEvent::SENTINEL) break;
 
         if (first.size() < N) first.push_back(e);

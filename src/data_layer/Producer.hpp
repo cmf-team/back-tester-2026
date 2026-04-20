@@ -1,46 +1,64 @@
-#include "common/MarketDataEvent.hpp"
-#include "common/Queue.hpp"
-#include "data_layer/Producer.hpp"
-#include <iostream>
-#include <deque>
+#pragma once
+#include "data_layer/JsonParser.hpp"
+#include <filesystem>
+#include <fstream>
+#include <string>
+#include <thread>
+#include <vector>
 
-using namespace cmf;
+namespace cmf {
 
-int main() {
-    SpscQueue<MarketDataEvent> q;
-    Producer prod("test_data/sample.mbo.json", q);
+    class Producer {
+    public:
+        Producer(std::filesystem::path file, SpscQueue<MarketDataEvent>& out)
+            : paths_{std::move(file)}, out_{out} {}
 
-    std::deque<MarketDataEvent> first, last;
-    constexpr int N = 5;
+        Producer(std::vector<std::filesystem::path> files, SpscQueue<MarketDataEvent>& out)
+            : paths_{std::move(files)}, out_{out} {}
 
-    prod.start();
+        ~Producer() {
+            if (thread_.joinable()) thread_.join();
+        }
 
-    while (true) {
-        MarketDataEvent e;      // ← объявляем заранее
-        q.pop(e);               // ← передаём по ссылке
-        if (e.ts_recv == MarketDataEvent::SENTINEL) break;
+        void start() {
+            thread_ = std::thread(&Producer::run, this);
+        }
 
-        if (first.size() < N) first.push_back(e);
-        last.push_back(e);
-        if (last.size() > N) last.pop_front();
-    }
+        void join() {
+            if (thread_.joinable()) thread_.join();
+        }
 
-    prod.join();
+    private:
+        void run() noexcept {
+            for (const auto& path : paths_) {
+                readFile(path);
+            }
 
-    std::cout << "=== First " << N << " events ===\n";
-    for (const auto& e : first) {
-        std::cout << "ts=" << e.ts_recv
-                  << " sym=" << e.symbol
-                  << " price=" << e.price << "\n";
-    }
+            MarketDataEvent sentinel{};
+            sentinel.ts_recv = MarketDataEvent::SENTINEL;
+            out_.push(sentinel);
+        }
 
-    std::cout << "\n=== Last " << N << " events ===\n";
-    for (const auto& e : last) {
-        std::cout << "ts=" << e.ts_recv
-                  << " sym=" << e.symbol
-                  << " price=" << e.price << "\n";
-    }
+        void readFile(const std::filesystem::path& path) noexcept {
+            std::ifstream file(path, std::ios::in);
+            if (!file) return;
 
-    std::cout << "\nTotal: " << (first.size() >= N ? first.size() : last.size()) << " events\n";
-    return 0;
-}
+            std::string line;
+            line.reserve(512);
+
+            while (std::getline(file, line)) {
+                if (line.empty()) continue;
+
+                auto ev = parse_mbo_line(line);
+                if (ev) {
+                    out_.push(*ev);
+                }
+            }
+        }
+
+        std::vector<std::filesystem::path> paths_;
+        SpscQueue<MarketDataEvent>& out_;
+        std::thread thread_;
+    };
+
+} // namespace cmf
