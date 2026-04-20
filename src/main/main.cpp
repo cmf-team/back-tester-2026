@@ -1,5 +1,4 @@
 #include "common/MarketDataEvent.hpp"
-#include "ingestion/EventQueue.hpp"
 #include "ingestion/FlatMerger.hpp"
 #include "ingestion/HierarchyMerger.hpp"
 #include "ingestion/Producer.hpp"
@@ -96,8 +95,8 @@ static StreamList build_streams(const std::vector<std::filesystem::path>& files)
 }
 
 struct Pipeline {
-    std::vector<std::unique_ptr<EventQueue>> queues;
-    std::vector<EventQueue*> ptrs;
+    std::vector<std::unique_ptr<SpscQueue<MarketDataEvent>>> queues;
+    std::vector<SpscQueue<MarketDataEvent>*> ptrs;
     std::vector<std::unique_ptr<Producer>> producers;
 
     void build(const StreamList& streams) {
@@ -106,7 +105,7 @@ struct Pipeline {
         producers.clear();
 
         for (auto& s : streams) {
-            auto q = std::make_unique<EventQueue>();
+            auto q = std::make_unique<SpscQueue<MarketDataEvent>>();
             ptrs.push_back(q.get());
 
             queues.push_back(std::move(q));
