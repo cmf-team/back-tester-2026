@@ -1,7 +1,7 @@
 #include "common/MarketDataEvent.hpp"
-#include "ingestion/FlatMerger.hpp"
-#include "ingestion/HierarchyMerger.hpp"
-#include "ingestion/Producer.hpp"
+#include "data_layer/EventFlatMerger.hpp"
+#include "data_layer/EventHierarchyMerger.hpp"
+#include "data_layer/Producer.hpp"
 
 #include <algorithm>
 #include <chrono>
