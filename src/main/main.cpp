@@ -35,7 +35,7 @@ int main() {
 
     // Запускаем мерджер
     std::vector<SpscQueue<MarketDataEvent>*> inputs = {&q1, &q2, &q3};
-    FlatMerger merger(inputs);
+    EventFlatMerger merger(inputs);
     merger.start();
 
     // Считываем и проверяем порядок
@@ -56,7 +56,7 @@ int main() {
         assert(result[i] == expected[i]);
     }
 
-    std::cout << "FlatMerger test passed! Global order preserved.\n";
+    std::cout << "EventFlatMerger test passed! Global order preserved.\n";
     std::cout << "Output: ";
     for (auto ts : result) std::cout << ts/1000 << " ";
     std::cout << "\n";
