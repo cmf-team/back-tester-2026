@@ -9,64 +9,85 @@ namespace cmf {
 
 template <typename T, std::size_t Cap = 1024>
 class SpscQueue {
-    static_assert((Cap & (Cap - 1)) == 0, "Cap must be a power of 2");
-    static constexpr std::size_t MASK = Cap - 1;
+    static_assert((Cap & (Cap - 1)) == 0, "Capacity must be power of 2");
+    static constexpr std::size_t IndexMask = Cap - 1;
 
-    struct alignas(64) ProdSide {
-        std::atomic<std::size_t> tail{0};
-        std::size_t              cached_head{0};
-        char                     pad[64 - sizeof(std::atomic<std::size_t>) - sizeof(std::size_t)];
+    struct alignas(64) Writer {
+        std::atomic<std::size_t> writeIdx{0};
+        std::size_t              readCache{0};
     };
 
-    struct alignas(64) ConsSide {
-        std::atomic<std::size_t> head{0};
-        std::size_t              cached_tail{0};
-        char                     pad[64 - sizeof(std::atomic<std::size_t>) - sizeof(std::size_t)];
+    struct alignas(64) Reader {
+        std::atomic<std::size_t> readIdx{0};
+        std::size_t              writeCache{0};
     };
 
-    alignas(64) std::array<T, Cap> buf_{};
-    alignas(64) ProdSide           p_{};
-    alignas(64) ConsSide           c_{};
+    alignas(64) std::array<T, Cap> storage_{};
+    alignas(64) Writer             writer_{};
+    alignas(64) Reader             reader_{};
 
 public:
     void push(const T& item) noexcept {
-        const std::size_t t = p_.tail.load(std::memory_order_relaxed);
-        if (t - p_.cached_head >= Cap) {
-            int spins = 0;
-            while (t - (p_.cached_head = c_.head.load(std::memory_order_acquire)) >= Cap) {
-                if (++spins < 64)
-                    _mm_pause();
-                else {
-                    spins = 0;
-                    std::this_thread::yield();
-                }
-            }
+        std::size_t write = writer_.writeIdx.load(std::memory_order_relaxed);
+
+        // Fast path
+        if (write - writer_.readCache >= Cap) {
+            slow_push(write);
         }
-        buf_[t & MASK] = item;
-        p_.tail.store(t + 1, std::memory_order_release);
+
+        storage_[write & IndexMask] = item;
+        writer_.writeIdx.store(write + 1, std::memory_order_release);
     }
 
     void pop(T& out) noexcept {
-        const std::size_t h = c_.head.load(std::memory_order_relaxed);
-        if (h >= c_.cached_tail) {
-            int spins = 0;
-            while (h >= (c_.cached_tail = p_.tail.load(std::memory_order_acquire))) {
-                if (++spins < 64)
-                    _mm_pause();
-                else {
-                    spins = 0;
-                    std::this_thread::yield();
-                }
-            }
+        std::size_t read = reader_.readIdx.load(std::memory_order_relaxed);
+
+        // Fast path
+        if (reader_.writeCache - read == 0) {
+            slow_pop(read);
         }
-        out = buf_[h & MASK];
-        c_.head.store(h + 1, std::memory_order_release);
+
+        out = storage_[read & IndexMask];
+        reader_.readIdx.store(read + 1, std::memory_order_release);
     }
 
-    T pop() noexcept {
-        T out;
-        pop(out);
-        return out;
+private:
+    void slow_push(std::size_t& write) noexcept {
+        int attempts = 0;
+
+        for (;;) {
+            writer_.readCache = reader_.readIdx.load(std::memory_order_acquire);
+
+            if (write - writer_.readCache < Cap) {
+                return;
+            }
+
+            backoff(attempts);
+        }
+    }
+
+    void slow_pop(std::size_t& read) noexcept {
+        int attempts = 0;
+
+        for (;;) {
+            reader_.writeCache = writer_.writeIdx.load(std::memory_order_acquire);
+
+            if (reader_.writeCache - read > 0) {
+                return;
+            }
+
+            backoff(attempts);
+        }
+    }
+
+    static inline void backoff(int& attempts) noexcept {
+        if (attempts < 48) {
+            _mm_pause();
+        } else {
+            std::this_thread::yield();
+            attempts = 0;
+        }
+        ++attempts;
     }
 };
 
