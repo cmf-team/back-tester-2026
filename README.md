@@ -1,117 +1,69 @@
-# CMF Advanced Backtesting Engine for Options
+# backtester-2026 — Data Ingestion Layer
 
-## Directory structure
+C++20 L3 market data ingestion layer for the Eurex EUR/USD options & futures backtester.
+
+## Repository layout
 
 ```
-.
-├── 3rdparty                    # place holder for 3rd party libraries (downloaded during the build)
-├── build                       # local build tree used by CMake
-├    ├── bin                    # generated binaries
-├    ├── lib                    # generated libs (including those, which are built from 3rd party sources)
-├    ├── cfg                    # generated config files (if any)
-├    └── include                # generated include files (installed during the build for 3rd party sources)
-├── cmake                       # cmake helper scripts
-├── config                      # example config files
-├── scripts                     # shell (and other) maintenance scripts
-├── src                         # source files
-├    ├── common                 # common utility files
-├    ├── ...                    # ...
-├    └── main                   # main() for back-tester app
-├── test                        # unit-tests and other tests
-├── CMakeLists.txt              # main build script
-└── README.md                   # this README
+include/
+  MarketDataEvent.hpp   # Core event struct (price, size, action, side, timestamps)
+  NdjsonParser.hpp      # Zero-dependency Databento NDJSON line parser
+src/
+  standard_task.cpp     # Single-file reader → processMarketDataEvent()
+  hard_task.cpp         # Multi-file parallel merger (FlatMerger + HierarchyMerger)
+CMakeLists.txt
 ```
-
-## OS
-
-Our primary platform is Linux, but nothing prevents it to be built and run on other OS.
-The following commands are for Linux users.
-Other users are encouraged to add the corresponding instructions for required steps in this README.
 
 ## Build
 
-Install dependencies once:
-
-```
-sudo apt install -y cmake g++
-```
-
-Build using cmake:
-
-```
-cmake -B build -S .
-cmake --build build -j
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j$(nproc)
 ```
 
-or
-
-```
-mkdir -p build
-pushd build
-cmake ..
-make -j VERBOSE=1
-popd
-```
-
-## Test
-
-To run unit tests:
-
-```
-ctest --test-dir build -j
-```
-
-or
-
-```
-pushd build
-ctest -j
-popd
-```
-
-or
-
-```
-build/bin/test/back-tester-tests
-```
-
-## Run
-
-Back-tester:
-
-```
-build/bin/back-tester
-```
-
-## Contributing
-
-Install UV, create a virtual environment, and install the project dependencies:
+## Standard task usage
 
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-uv sync
+./build/standard_task data/2025-04-01_EURUSD_options_12345.json
 ```
 
-Then activate the virtual environment and set up the git pre-commit hooks:
+Prints the first and last 10 `MarketDataEvent` objects and a processing summary.
+
+## Hard task usage
 
 ```bash
-source .venv/bin/activate
-pre-commit install
+# Run both strategies and benchmark
+./build/hard_task data/daily/
+
+# Run only one strategy
+./build/hard_task data/daily/ flat
+./build/hard_task data/daily/ hierarchy
 ```
 
-After that, formatting and linting will run automatically before each commit.  
-If the source code does not meet the required formatting rules, the hook will 
-modify the files and stop the commit, and you will need to stage the updated 
-changes manually.
+## Design notes
 
-To run formatting and linting yourself, use one of these commands:
+### MarketDataEvent
+Follows the Databento MBO schema. Prices are stored as `int64_t` in fixed-point
+(1 unit = 1 × 10⁻⁹) matching the wire format; `price_decimal()` converts lazily.
+The sort key is `ts_recv` (Databento's monotonic hardware timestamp) with
+`ts_event` as a tiebreaker, consistent with Databento's index timestamp definition.
 
-```bash
-pre-commit run --files file.py
-pre-commit run --all-files
-```
+### Parser
+`NdjsonParser` uses `std::from_chars` (no locale, no allocation) for all numeric
+fields. It handles both quoted and unquoted integer fields as Databento sometimes
+quotes `int64` values for JSON precision.
 
-The current pre-commit hooks do the following:
-- format and lint C++ code with `clang-format`;
-- format and lint Python code with `ruff`;
-- strip outputs from Jupyter notebooks.
+### FlatMerger
+Classic k-way merge with a `std::priority_queue` min-heap. O(N log k) time,
+O(k) memory. Each file has one producer thread pushing into a `BlockingQueue<8192>`.
+The dispatcher thread pops from the heap.
+
+### HierarchyMerger
+Binary tournament tree of `MergePair` nodes. Each node runs its own background
+thread that merges two `BlockingQueue` streams into one. The tree has depth
+⌈log₂ k⌉. This increases parallelism but adds O(k) threads and latency from
+the intermediate queues.
+
+For k ≈ 20 files the FlatMerger is generally faster because the heap is tiny
+and cache-resident. The HierarchyMerger becomes advantageous when k is large
+(hundreds of files) and producers are IO-bound.
