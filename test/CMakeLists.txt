@@ -20,7 +20,11 @@ add_executable(${TARGET} ${TEST_SRC})
 target_link_libraries(${TARGET} PRIVATE
     Catch2-static-lib
     back-tester-common
+    back-tester-ingestion
 )
 
-# Register the tests with CTest
-catch_discover_tests(${TARGET})
+# Register the tests with CTest.
+# Use PRE_TEST discovery so the test binary is only invoked at ctest time
+# (not during the build step). This keeps the build itself independent of
+# any runtime-loader quirks on the host.
+catch_discover_tests(${TARGET} DISCOVERY_MODE PRE_TEST)

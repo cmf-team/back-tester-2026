@@ -39,3 +39,31 @@ target_link_libraries(${TGT} PUBLIC INTERFACE
     $<$<CONFIG:Release>:-lCatch2Main -lCatch2>
 )
 
+# ---------------------------------------------------------------------------------------
+# zstd - fast lossless compression (used to read source L3 data files)
+ExternalProject_Add(
+    zstd
+    GIT_REPOSITORY https://github.com/facebook/zstd.git
+    GIT_TAG v1.5.6
+    GIT_SHALLOW TRUE
+    GIT_PROGRESS TRUE
+    SOURCE_DIR "${CMAKE_SOURCE_DIR}/3rdparty/zstd"
+    BINARY_DIR "${CMAKE_BINARY_DIR}/3rdparty/zstd"
+    SOURCE_SUBDIR build/cmake
+    CMAKE_ARGS ${FORWARDED_CMAKE_ARGS}
+        -DZSTD_BUILD_PROGRAMS=OFF
+        -DZSTD_BUILD_SHARED=OFF
+        -DZSTD_BUILD_STATIC=ON
+        -DZSTD_BUILD_TESTS=OFF
+        -DZSTD_LEGACY_SUPPORT=OFF
+    BUILD_COMMAND $(MAKE)
+    INSTALL_COMMAND $(MAKE) -s DESTDIR=${DESTDIR} install
+)
+
+set(TGT zstd-static-lib)
+add_library(${TGT} INTERFACE)
+add_dependencies(${TGT} zstd)
+target_include_directories(${TGT} SYSTEM PUBLIC INTERFACE ${CMAKE_BINARY_DIR}/include)
+target_link_directories(${TGT} PUBLIC INTERFACE ${CMAKE_BINARY_DIR}/lib ${CMAKE_BINARY_DIR}/lib64)
+target_link_libraries(${TGT} PUBLIC INTERFACE -lzstd)
+
