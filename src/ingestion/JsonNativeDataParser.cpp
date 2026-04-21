@@ -1,4 +1,4 @@
-#include "NativeDataParser.hpp"
+#include "JsonNativeDataParser.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -255,8 +255,21 @@ static MarketDataEvent ndp_parseLine(const char *&p, const char *end) {
         if (ks[2] == 'd') { // side
           if (p < end && *p == '"') {
             ++p;
-            if (p < end)
-              e.side = static_cast<Side>(*p++);
+            if (p < end) {
+              const char side_char = *p++;
+              switch (side_char) {
+              case 'B':
+                e.side = Side::Buy;
+                break;
+              case 'S':
+              case 'A':
+                e.side = Side::Sell;
+                break;
+              default:
+                e.side = Side::None;
+                break;
+              }
+            }
             while (p < end && *p != '"')
               ++p;
             if (p < end)
@@ -387,8 +400,13 @@ static MarketDataEvent ndp_parseLine(const char *&p, const char *end) {
   return e;
 }
 
-void NativeDataParser::parse_inner(
+void JsonNativeDataParser::parse_inner(
     const std::function<void(const MarketDataEvent &)> &f) const {
+  if (!path_.string().ends_with(".mbo.json"))
+    throw std::runtime_error(
+        "NativeDataParser: unsupported format, expected .mbo.json file, got " +
+        path_.string());
+
   int fd = ::open(path_.c_str(), O_RDONLY);
   if (fd == -1)
     throw std::runtime_error("NativeDataParser: cannot open " + path_.string());

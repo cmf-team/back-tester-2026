@@ -1,4 +1,4 @@
-#include "SimpleDataParser.hpp"
+#include "JsonSimpleDataParser.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -134,8 +134,21 @@ static MarketDataEvent parseLine(const std::string &line) {
     e.action = static_cast<Action>((*action)[0]);
 
   auto side = getString(line, "side");
-  if (side && !side->empty())
-    e.side = static_cast<Side>((*side)[0]);
+  if (side && !side->empty()) {
+    const char side_char = (*side)[0];
+    switch (side_char) {
+    case 'B':
+      e.side = Side::Buy;
+      break;
+    case 'S':
+    case 'A':
+      e.side = Side::Sell;
+      break;
+    default:
+      e.side = Side::None;
+      break;
+    }
+  }
 
   if (!isNull(line, "price")) {
     auto price = getString(line, "price");
@@ -170,8 +183,13 @@ static MarketDataEvent parseLine(const std::string &line) {
   return e;
 }
 
-void SimpleDataParser::parse_inner(
+void JsonSimpleDataParser::parse_inner(
     const std::function<void(const MarketDataEvent &)> &f) const {
+  if (!path_.string().ends_with(".mbo.json"))
+    throw std::runtime_error(
+        "SimpleDataParser: unsupported format, expected .mbo.json file, got " +
+        path_.string());
+
   std::ifstream fs(path_);
   if (!fs.is_open())
     throw std::runtime_error("SimpleDataParser: cannot open " + path_.string());

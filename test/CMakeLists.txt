@@ -16,10 +16,15 @@ file(GLOB TEST_SRC CONFIGURE_DEPENDS *.cpp)
 set(TARGET back-tester-tests)
 add_executable(${TARGET} ${TEST_SRC})
 
+target_compile_definitions(${TARGET} PRIVATE
+    FIXTURES_DIR="${CMAKE_SOURCE_DIR}/test/fixtures"
+)
+
 # Link against the necessary libraries
 target_link_libraries(${TARGET} PRIVATE
     Catch2-static-lib
     back-tester-ingestion
+    back-tester-order-book
 )
 
 # Register the tests with CTest

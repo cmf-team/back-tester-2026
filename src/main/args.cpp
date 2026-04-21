@@ -1,8 +1,7 @@
 #include "args.hpp"
 
-constexpr std::string DATA_FILE_SUFFIX = ".mbo.json";
-
-cmf::Config cmf::parse_args(const std::span<const char *> args) {
+cmf::Config cmf::parse_args(const std::span<const char *> args,
+                            std::string_view filename_ext) {
   auto print_usage_hint = [&]() {
     std::fprintf(stderr, "Usage: %s <file.mbo.json | folder>\n", args[0]);
   };
@@ -20,7 +19,7 @@ cmf::Config cmf::parse_args(const std::span<const char *> args) {
     for (auto &entry : std::filesystem::directory_iterator(source)) {
       const auto &path = entry.path();
       if (!std::filesystem::is_regular_file(path) ||
-          !path.string().ends_with(DATA_FILE_SUFFIX)) {
+          !path.string().ends_with(filename_ext)) {
         continue;
       }
 
@@ -34,7 +33,7 @@ cmf::Config cmf::parse_args(const std::span<const char *> args) {
 
     cfg.data_files = std::move(data_files);
   } else if (std::filesystem::is_regular_file(source)) {
-    if (!source.string().ends_with(DATA_FILE_SUFFIX)) {
+    if (!source.string().ends_with(filename_ext)) {
       print_usage_hint();
 
       throw std::runtime_error("Invalid file extension");

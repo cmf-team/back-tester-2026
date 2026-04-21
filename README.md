@@ -83,6 +83,24 @@ Back-tester:
 build/bin/back-tester
 ```
 
+## Data Processing
+
+### Convert market data to Feather format
+
+The `convert_to_feather.py` script converts JSON market data files (`.mbo.json` format) to the efficient Apache Feather columnar format, which is optimized for fast I/O and analysis:
+
+```bash
+uv run scripts/convert_to_feather.py <path_to_data_directory>
+```
+
+Replace `<path_to_data_directory>` with the directory containing your `.mbo.json` files. The script will process all JSON files in the directory and generate corresponding `.mbo.json.feather` files.
+
+Example:
+
+```bash
+uv run scripts/convert_to_feather.py ./data/market_data/
+```
+
 ## Contributing
 
 Install UV, create a virtual environment, and install the project dependencies:

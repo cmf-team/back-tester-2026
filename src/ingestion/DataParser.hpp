@@ -11,6 +11,8 @@ protected:
   std::filesystem::path path_;
 
 public:
+  static constexpr std::string_view bench_suffix = "";
+
   explicit DataParser(std::filesystem::path path) : path_(std::move(path)) {}
 
   template <std::invocable<const MarketDataEvent &> F> void parse(F &&f) const {

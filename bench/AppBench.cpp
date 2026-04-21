@@ -1,9 +1,10 @@
 #include "common/BlockingQueue.hpp"
 #include "common/MarketDataEvent.hpp"
+#include "ingestion/FeatherDataParser.hpp"
 #include "ingestion/FlatMerger.hpp"
 #include "ingestion/HierarchyMerger.hpp"
 #include "ingestion/IngestionPipeline.hpp"
-#include "ingestion/NativeDataParser.hpp"
+#include "ingestion/JsonNativeDataParser.hpp"
 #include <benchmark/benchmark.h>
 
 #include <deque>
@@ -11,7 +12,8 @@
 #include <thread>
 #include <vector>
 
-template <typename T> using LFQ = cmf::LockFreeQueue<T, (1 << 13)>;
+#include "order_book/AbseilOrderBook.hpp"
+#include "order_book/SimpleOrderBookRouter.hpp"
 
 static void BM_App_FullPipeline(benchmark::State &state) {
   const char *env = std::getenv("BENCH_DIR");
@@ -25,14 +27,15 @@ static void BM_App_FullPipeline(benchmark::State &state) {
     return;
   }
 
-  static constexpr std::string_view kSuffix = ".mbo.json";
+  using parser_impl = cmf::FeatherDataParser;
   std::vector<std::filesystem::path> files;
   for (const auto &entry : std::filesystem::directory_iterator(dir))
-    if (entry.is_regular_file() && entry.path().string().ends_with(kSuffix))
+    if (entry.is_regular_file() &&
+        entry.path().string().ends_with(parser_impl::filename_ext))
       files.push_back(entry.path());
 
   if (files.empty()) {
-    state.SkipWithError("No .mbo.json files found in BENCH_DIR directory.");
+    state.SkipWithError("No target files found in BENCH_DIR directory.");
     return;
   }
 
@@ -56,16 +59,20 @@ static void BM_App_FullPipeline(benchmark::State &state) {
         auto push_fn = [&file_queues, i](const cmf::MarketDataEvent &e) {
           file_queues[i].push(e);
         };
-        cmf::IngestionPipeline<cmf::NativeDataParser, decltype(push_fn)>
-            pipeline(files[i], push_fn);
+        cmf::IngestionPipeline<parser_impl, decltype(push_fn)> pipeline(
+            files[i], push_fn);
         pipeline.ingest();
         file_queues[i].close();
       });
     }
 
     int64_t count = 0;
-    while (merged_queue.pop([&](cmf::MarketDataEvent &&) { ++count; })) {
-    }
+    cmf::SimpleOrderBookRouter<cmf::AbseilOrderBook> router;
+    while (merged_queue.pop([&](cmf::MarketDataEvent &&e) {
+      ++count;
+      router.apply(e);
+    }))
+      ;
 
     for (auto &t : producers)
       t.join();

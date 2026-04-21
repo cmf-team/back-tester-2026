@@ -64,3 +64,83 @@ target_include_directories(${TGT} SYSTEM PUBLIC INTERFACE ${CMAKE_BINARY_DIR}/in
 target_link_directories(${TGT} PUBLIC INTERFACE ${CMAKE_BINARY_DIR}/lib)
 target_link_libraries(${TGT} PUBLIC INTERFACE -lbenchmark_main -lbenchmark)
 
+# ---------------------------------------------------------------------------------------
+# Apache Arrow C++ - enough for reading .feather files
+ExternalProject_Add(
+        apache-arrow
+        GIT_REPOSITORY https://github.com/apache/arrow.git
+        GIT_TAG apache-arrow-24.0.0
+        GIT_SHALLOW TRUE
+        GIT_PROGRESS TRUE
+        SOURCE_DIR "${CMAKE_SOURCE_DIR}/3rdparty/apache-arrow"
+        BINARY_DIR "${CMAKE_BINARY_DIR}/3rdparty/apache-arrow"
+        SOURCE_SUBDIR cpp
+        CMAKE_ARGS
+        ${FORWARDED_CMAKE_ARGS}
+        -DARROW_BUILD_SHARED=ON
+        -DARROW_BUILD_STATIC=OFF
+        -DARROW_BUILD_TESTS=OFF
+        -DARROW_BUILD_BENCHMARKS=OFF
+        -DARROW_BUILD_EXAMPLES=OFF
+        -DARROW_BUILD_UTILITIES=OFF
+
+        # Needed for Feather / IPC
+        -DARROW_IPC=ON
+
+        # Optional features you likely do not need just for Feather
+        -DARROW_COMPUTE=OFF
+        -DARROW_CSV=OFF
+        -DARROW_JSON=OFF
+        -DARROW_DATASET=OFF
+        -DARROW_FILESYSTEM=OFF
+        -DARROW_PARQUET=OFF
+
+        # Compression support for typical Feather files
+        -DARROW_WITH_ZLIB=ON
+        -DARROW_WITH_LZ4=ON
+        -DARROW_WITH_ZSTD=ON
+
+        # Let Arrow build/fetch its own third-party deps
+        -DARROW_DEPENDENCY_SOURCE=BUNDLED
+        BUILD_COMMAND $(MAKE)
+        INSTALL_COMMAND $(MAKE) -s DESTDIR=${DESTDIR} install
+)
+
+set(TGT apache-arrow-lib)
+add_library(${TGT} INTERFACE)
+add_dependencies(${TGT} apache-arrow)
+target_include_directories(${TGT} SYSTEM PUBLIC INTERFACE ${CMAKE_BINARY_DIR}/include)
+target_link_directories(${TGT} PUBLIC INTERFACE ${CMAKE_BINARY_DIR}/lib)
+target_link_libraries(${TGT} PUBLIC INTERFACE -larrow)
+
+# ---------------------------------------------------------------------------------------
+# Abseil
+ExternalProject_Add(
+        abseil-cpp
+        GIT_REPOSITORY https://github.com/abseil/abseil-cpp.git
+        GIT_TAG 20260107.1
+        GIT_SHALLOW TRUE
+        GIT_PROGRESS TRUE
+        SOURCE_DIR "${CMAKE_SOURCE_DIR}/3rdparty/abseil-cpp"
+        BINARY_DIR "${CMAKE_BINARY_DIR}/3rdparty/abseil-cpp"
+        CMAKE_ARGS
+        ${FORWARDED_CMAKE_ARGS}
+        -DABSL_BUILD_TESTING=OFF
+        -DABSL_USE_GOOGLETEST_HEAD=OFF
+        -DABSL_PROPAGATE_CXX_STD=ON
+        -DCMAKE_CXX_STANDARD=20
+        -DABSL_ENABLE_INSTALL=ON
+        BUILD_COMMAND $(MAKE)
+        INSTALL_COMMAND $(MAKE) -s DESTDIR=${DESTDIR} install
+)
+
+set(TGT abseil-lib)
+add_library(${TGT} INTERFACE)
+add_dependencies(${TGT} abseil-cpp)
+target_include_directories(${TGT} SYSTEM PUBLIC INTERFACE ${CMAKE_BINARY_DIR}/include)
+target_link_directories(${TGT} PUBLIC INTERFACE ${CMAKE_BINARY_DIR}/lib)
+# Link all abseil libs that are installed
+target_link_libraries(${TGT} PUBLIC INTERFACE
+    ${CMAKE_BINARY_DIR}/lib/libabsl_raw_hash_set.a
+    ${CMAKE_BINARY_DIR}/lib/libabsl_base.a
+)
