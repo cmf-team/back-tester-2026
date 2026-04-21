@@ -32,6 +32,16 @@ enum class TimeInForce { None = 0, GoodTillCancel, FillAndKill, FillOrKill };
 
 enum class SecurityType { None = 0, FX, Stock, Bond, Future, Option };
 
+enum class Action : char {
+  Add = 'A',
+  Modify = 'M',
+  Cancel = 'C',
+  Clear = 'R',
+  Trade = 'T',
+  Fill = 'F',
+  None = 'N'
+};
+
 // id for an object identifying a specific security traded on a specific market
 struct MarketSecurityId {
   MarketId mktId;
