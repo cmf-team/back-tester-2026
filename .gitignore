@@ -279,3 +279,5 @@ __marimo__/
 # Ignore all local history of files
 .history
 .ionide
+data/*
+json/*
