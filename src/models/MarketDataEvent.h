@@ -9,7 +9,9 @@ struct MarketDataEvent {
     std::string ts_event;
     double price;
     double size;
+    // ('A' ask, 'B' bid, 'N' none)
     std::string side;
+    // ('A','M','C','R','T','F','N')
     std::string action;
     int channel_id;
     std::string order_id;

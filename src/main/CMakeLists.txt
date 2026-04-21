@@ -8,7 +8,9 @@ add_library(${TARGET} STATIC ${SRC}
         ../utils/MarketDataReader.h
         ../utils/MarketDataReader.cpp
         ../utils/MarketDataProcessor.cpp
-        ../utils/MarketDataProcessor.h)
+        ../utils/MarketDataProcessor.h
+        ../common/LimitOrderBook.h
+        ../common/LimitOrderBook.cpp)
 target_link_libraries(${TARGET} PUBLIC
     back-tester-common
 )
