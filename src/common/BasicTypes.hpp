@@ -26,6 +26,19 @@ using Price = double;
 
 enum class Side : signed short { None = 0, Buy = 1, Sell = -1 };
 
+// Order-book action code (matches the single-character EOBI/MBO encoding).
+// Values are kept equal to the ASCII code used in the raw L3 feed so that
+// ingestion code can cast directly from the file byte.
+enum class Action : char {
+  None = 0,
+  Add = 'A',     // new order added to the book
+  Cancel = 'C',  // order cancelled / size removed
+  Modify = 'M',  // order modified in place
+  Trade = 'T',   // trade print (no book change)
+  Fill = 'F',    // order filled (book state change)
+  Clear = 'R',   // book reset / clear
+};
+
 enum class OrderType { None = 0, Limit, Market };
 
 enum class TimeInForce { None = 0, GoodTillCancel, FillAndKill, FillOrKill };
