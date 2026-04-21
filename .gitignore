@@ -1,9 +1,11 @@
 .idea/
 3rdparty/*
 build
+build-*/
 log
 .claude
 CLAUDE.md
+.DS_Store
 
 
 ### C++ ###
