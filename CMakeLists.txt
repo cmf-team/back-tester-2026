@@ -5,8 +5,11 @@ project(back-tester VERSION 0.0.1 DESCRIPTION "CMF back-tester" LANGUAGES CXX C)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake")
 
 include(cmake/GlobalSettings.cmake)
-include(cmake/ThirdPartyLibs.cmake)
 include(cmake/GenerateVersionFile.cmake)
+
+if(BUILD_TESTS)
+    include(cmake/ThirdPartyLibs.cmake)
+endif()
 
 add_subdirectory(src)
 add_subdirectory(config)
