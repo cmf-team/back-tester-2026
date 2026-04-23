@@ -12,3 +12,5 @@ target_link_libraries(${TARGET} PUBLIC
 set(TARGET back-tester)
 add_executable(${TARGET} main.cpp)
 target_link_libraries(${TARGET} PUBLIC back-tester-lib)
+
+add_subdirectory(ingestion)
