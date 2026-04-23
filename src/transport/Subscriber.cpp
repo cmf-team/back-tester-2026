@@ -1,4 +1,5 @@
 #include "transport/Subscriber.hpp"
+#include <iostream>
 
 #include <exception>
 #include <stdexcept>
