@@ -39,3 +39,24 @@ target_link_libraries(${TGT} PUBLIC INTERFACE
     $<$<CONFIG:Release>:-lCatch2Main -lCatch2>
 )
 
+# ---------------------------------------------------------------------------------------
+# simdjson - fast JSON parsing
+ExternalProject_Add(
+        simdjson
+        GIT_REPOSITORY https://github.com/simdjson/simdjson.git
+        GIT_TAG v3.12.2
+        GIT_SHALLOW TRUE
+        GIT_PROGRESS TRUE
+        SOURCE_DIR "${CMAKE_SOURCE_DIR}/3rdparty/simdjson"
+        BINARY_DIR "${CMAKE_BINARY_DIR}/3rdparty/simdjson"
+        CMAKE_ARGS ${FORWARDED_CMAKE_ARGS}
+        BUILD_COMMAND $(MAKE)
+        INSTALL_COMMAND $(MAKE) -s DESTDIR=${DESTDIR} install
+)
+
+set(TGT simdjson-static-lib)
+add_library(${TGT} INTERFACE)
+add_dependencies(${TGT} simdjson)
+target_include_directories(${TGT} SYSTEM PUBLIC INTERFACE ${CMAKE_BINARY_DIR}/include)
+target_link_directories(${TGT} PUBLIC INTERFACE ${CMAKE_BINARY_DIR}/lib ${CMAKE_BINARY_DIR}/lib64)
+target_link_libraries(${TGT} PUBLIC INTERFACE -lsimdjson)
