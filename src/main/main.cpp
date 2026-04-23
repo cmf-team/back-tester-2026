@@ -7,13 +7,17 @@
 
 using namespace cmf;
 
-int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[]) {
-  try {
-    std::cout << "Hell! Oh, world!" << std::endl;
-  } catch (std::exception &ex) {
-    std::cerr << "Back-tester threw an exception: " << ex.what() << std::endl;
-    return 1;
-  }
+int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
+{
+    try
+    {
+        std::cout << "Hell! Oh, world!" << std::endl;
+    }
+    catch (std::exception &ex)
+    {
+        std::cerr << "Back-tester threw an exception: " << ex.what() << std::endl;
+        return 1;
+    }
 
-  return 0;
+    return 0;
 }
