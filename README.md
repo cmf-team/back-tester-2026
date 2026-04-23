@@ -33,7 +33,7 @@ Other users are encouraged to add the corresponding instructions for required st
 Install dependencies once:
 
 ```
-sudo apt install -y cmake g++
+sudo apt install -y cmake g++ clang-format
 ```
 
 Build using cmake:
@@ -99,9 +99,9 @@ source .venv/bin/activate
 pre-commit install
 ```
 
-After that, formatting and linting will run automatically before each commit.  
-If the source code does not meet the required formatting rules, the hook will 
-modify the files and stop the commit, and you will need to stage the updated 
+After that, formatting and linting will run automatically before each commit.
+If the source code does not meet the required formatting rules, the hook will
+modify the files and stop the commit, and you will need to stage the updated
 changes manually.
 
 To run formatting and linting yourself, use one of these commands:

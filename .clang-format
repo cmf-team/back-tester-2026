@@ -1,0 +1,30 @@
+BasedOnStyle: LLVM
+
+# Allman braces
+BreakBeforeBraces: Allman
+
+# Indentation
+IndentWidth: 4
+UseTab: Never
+
+# Namespace formatting
+NamespaceIndentation: None
+
+# Force newline after namespace opening and before closing
+BraceWrapping:
+  AfterNamespace: true
+
+# Keep empty lines at start/end of blocks (helps namespaces look like you want)
+KeepEmptyLinesAtTheStartOfBlocks: true
+
+# Comments: try not to touch them much
+ReflowComments: false
+ColumnLimit: 0
+
+# Align * and & with the type
+PointerAlignment: Left
+ReferenceAlignment: Left
+
+# Try to separate template<> on a separate line
+AlwaysBreakTemplateDeclarations: Yes
+PenaltyBreakTemplateDeclaration: 0
