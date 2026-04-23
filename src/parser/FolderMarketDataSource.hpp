@@ -14,7 +14,7 @@
 
 namespace cmf {
 
-class FolderMarketDataSource : public IMarketDataSource {
+class FolderMarketDataSource final : public IMarketDataSource {
 public:
   explicit FolderMarketDataSource(const std::filesystem::path& folder);
 

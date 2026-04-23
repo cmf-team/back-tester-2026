@@ -34,7 +34,7 @@ private:
   int         fd_{-1};
 };
 
-class FileMarketDataSource : public IMarketDataSource {
+class FileMarketDataSource final : public IMarketDataSource {
 public:
   // Opens and mmaps the file.
   explicit FileMarketDataSource(const std::filesystem::path& path);
