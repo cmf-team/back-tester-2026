@@ -17,8 +17,8 @@ repos:
       - id: nbstripout
   - repo: https://github.com/pre-commit/mirrors-clang-format
     rev: v22.1.3
-    types: [c++]
     hooks:
       # Format C++ code according to our style guide.
       - id: clang-format
-exclude: 'thirdparty/.*|data/.*'
+        types: [c++]
+        exclude: 'thirdparty/.*|data/.*'
