@@ -81,4 +81,4 @@ void FlatSyncedQueue::initializeIfNeeded() {
   initialized_ = true;
 }
 
-} // namespace transport
+} 

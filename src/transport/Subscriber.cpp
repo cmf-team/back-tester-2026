@@ -58,4 +58,4 @@ template <typename QueueT> void QueueSubscriberT<QueueT>::run() {
 template class QueueSubscriberT<FlatSyncedQueue>;
 template class QueueSubscriberT<HierarchicalSyncedQueue>;
 
-} // namespace transport
+} 

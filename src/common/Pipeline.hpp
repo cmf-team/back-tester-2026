@@ -17,7 +17,7 @@ void tryStopStage(Stage &stage, std::exception_ptr &first_error) {
   }
 }
 
-} // namespace detail
+} 
 
 template <typename... Stages> void runPipeline(Stages &...stages) {
   (..., stages.run());
@@ -31,4 +31,4 @@ template <typename... Stages> void stopPipeline(Stages &...stages) {
   }
 }
 
-} // namespace common::pipeline
+} 

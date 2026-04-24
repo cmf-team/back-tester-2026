@@ -130,4 +130,4 @@ void HierarchicalSyncedQueue::initializeIfNeeded() {
   initialized_ = true;
 }
 
-} // namespace transport
+} 

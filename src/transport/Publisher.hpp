@@ -27,4 +27,4 @@ private:
 
 using Publisher = PublisherT<FlatSyncedQueue>;
 using HierarchicalPublisher = PublisherT<HierarchicalSyncedQueue>;
-} // namespace transport
+} 

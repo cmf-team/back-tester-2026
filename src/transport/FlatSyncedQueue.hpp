@@ -42,4 +42,4 @@ private:
   std::priority_queue<Item, std::vector<Item>, ItemCompare> merged_events_;
   std::vector<MarketEventsQueue::Sptr> market_events_queues_;
 };
-} // namespace transport
+} 

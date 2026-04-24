@@ -50,4 +50,4 @@ parseUtcTimestampNs(const std::string_view timestamp) noexcept;
 std::optional<std::int64_t>
 parsePrice1e9(const std::string_view price_text) noexcept;
 
-} // namespace data_layer::json_line
+} 

@@ -48,4 +48,4 @@ private:
   transport::MarketEventsQueue::Sptr market_events_queue_;
   std::shared_ptr<std::atomic<bool>> stop_requested_;
 };
-} // namespace data_layer
+} 

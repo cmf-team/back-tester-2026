@@ -82,4 +82,4 @@ using MarketDataFolderLoader =
 using HierarchicalMarketDataFolderLoader =
     MarketDataFolderLoaderT<transport::HierarchicalSyncedQueue>;
 
-} // namespace data_layer
+} 

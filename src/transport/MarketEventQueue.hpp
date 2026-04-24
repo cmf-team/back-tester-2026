@@ -22,4 +22,4 @@ private:
   std::condition_variable cv_;
   std::deque<MarketDataEvent> events_;
 };
-} // namespace transport
+} 

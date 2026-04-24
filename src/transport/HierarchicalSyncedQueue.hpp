@@ -46,4 +46,4 @@ private:
   std::vector<Candidate> tree_;
   std::vector<MarketEventsQueue::Sptr> market_events_queues_;
 };
-} // namespace transport
+} 

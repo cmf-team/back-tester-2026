@@ -18,4 +18,4 @@ MarketDataEvent MarketEventsQueue::popLatestEvent() {
 
 std::size_t MarketEventsQueue::size() const { return events_.size(); }
 
-} // namespace transport
+} 

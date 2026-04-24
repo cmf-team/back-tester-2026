@@ -153,7 +153,7 @@ std::optional<MarketDataEvent> parseMboLine(const std::string_view line) {
   return event;
 }
 
-} // namespace
+} 
 
 template <typename JsonParser>
 MarketDataParser<JsonParser>::MarketDataParser(
@@ -211,4 +211,4 @@ void MarketDataParser<JsonParser>::parseMboEventsFromFile(
 
 template class MarketDataParser<PlainJsonLineParser>;
 
-} // namespace data_layer
+} 

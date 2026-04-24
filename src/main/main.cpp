@@ -1,97 +1,70 @@
 #include "common/Pipeline.hpp"
 #include "data_layer/JsonMarketDataFolderLoader.hpp"
+#include "domain/LimitOrderBook.hpp"
+#include "domain/Snapshotter.hpp"
 #include "transport/Subscriber.hpp"
-#include <common/LimitOrderBook.hpp>
-#include <filesystem>
+
+#include <chrono>
+#include <cstdint>
 #include <iostream>
 #include <memory>
 #include <string>
-#include <vector>
 
 namespace {
 
 template <typename QueueT>
-void runPipeline(const std::vector<std::string> &json_files) {
-  const auto queue = std::make_shared<QueueT>(json_files.size());
-  domain::LimitOrderBook<QueueT> limit_order_book(4);
+void run(const std::string & bench_name,
+  const std::string &folder, std::size_t num_threads,
+         std::uint64_t snapshot_interval_ns = 1'000'000'000ULL) {
+  const auto files = data_layer::discoverJsonFiles(folder);
+  const auto queue = std::make_shared<QueueT>(files.size());
 
-  {
-    data_layer::MarketDataFolderLoaderT<QueueT> folder_loader(json_files,
-                                                              queue);
-    transport::QueueSubscriberT<QueueT> subscriber(queue);
+  domain::LimitOrderBook<QueueT> lob(num_threads);
+  domain::Snapshotter<QueueT> snapshotter(lob, snapshot_interval_ns);
 
-    subscriber.addSubscriber({
-        .name = "LOB",
-        .onEvent =
-            [&](const domain::events::MarketDataEvent &event) {
-              limit_order_book.onEvent(event);
-            },
-        .onEndEvents = [&]() { limit_order_book.onEndEvent(); },
-    });
+  data_layer::MarketDataFolderLoaderT<QueueT> loader(files, queue);
+  transport::QueueSubscriberT<QueueT> subscriber(queue);
 
-    common::pipeline::runPipeline(folder_loader, subscriber);
-    common::pipeline::stopPipeline(subscriber, folder_loader);
+  subscriber.addSubscriber({
+      .name = "LOB",
+      .onEvent = [&](const auto &e) { lob.onEvent(e); },
+      .onEndEvents = [&] { lob.onEndEvent(); },
+  });
+  subscriber.addSubscriber({
+      .name = "Snapshotter",
+      .onEvent = [&](const auto &e) { snapshotter.onEvent(e); },
+      .onEndEvents = [&] { snapshotter.onEndEvents(); },
+  });
 
-    // implement logging LOB
-    auto bids = limit_order_book.getAllBids();
-    auto asks = limit_order_book.getAllAsks();
-    std::cout << "Actual LOB Bids:\n";
-    for (const auto &[instrument_id, bids] : bids) {
-      std::cout << "Instrument " << instrument_id << ":\n";
-      for (const auto &[price, quantity] : bids) {
-        std::cout << "  bids: {" << price << ": " << quantity << "}\n";
-      }
-    }
-    std::cout << "Actual LOB Asks:\n";
-    for (const auto &[instrument_id, asks] : asks) {
-      std::cout << "Instrument " << instrument_id << ":\n";
-      for (const auto &[price, quantity] : asks) {
-        std::cout << "  asks: {" << price << ": " << quantity << "}\n";
-      }
-    }
+  const auto t0 = std::chrono::steady_clock::now();
+
+  common::pipeline::runPipeline(loader, subscriber);
+  common::pipeline::stopPipeline(subscriber, loader);
+
+  const auto elapsed_us =
+      std::chrono::duration_cast<std::chrono::microseconds>(
+          std::chrono::steady_clock::now() - t0)
+          .count();
+
+  std::cout << "bench_name=" << bench_name << " ";
+  std::cout << "threads=" << num_threads
+            << " events=" << snapshotter.eventsSeen()
+            << " snapshots=" << snapshotter.snapshots().size()
+            << " elapsed_us=" << elapsed_us << '\n';
+  for (const auto &snap : snapshotter.snapshots()) {
+    std::cout << snap;
   }
+  snapshotter.printFinalBestQuotes(std::cout);
 }
 
 } // namespace
 
-int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
-  namespace fs = std::filesystem;
-  const fs::path tests_path =
-      "/home/evo/Workspace/cmf/back-tester-2026/tests_json";
-  std::vector<std::string> json_files;
-
-  try {
-    if (!fs::is_directory(tests_path)) {
-      std::cerr << "Expected tests_json directory: " << tests_path << '\n';
-      return 1;
-    }
-    json_files = data_layer::discoverJsonFiles(tests_path.string());
-  } catch (const std::exception &ex) {
-    std::cerr << ex.what() << '\n';
-    return 1;
-  }
-
-  if (json_files.empty()) {
-    std::cerr << "No .mbo.json files to process in " << tests_path << '\n';
-    return 1;
-  }
-
-  std::cout << "Using JSON files from: " << tests_path << '\n';
-  for (const auto &file : json_files) {
-    std::cout << "  - " << file << '\n';
-  }
-
-  runPipeline<transport::FlatSyncedQueue>(json_files);
-
-  std::cout
-      << "\nExpected final LOB state for quick debug (L3 order-id based):\n";
-  std::cout << "Instrument 910001:\n";
-  std::cout << "  bids: {100.000000000: 12, 99.500000000: 8}\n";
-  std::cout << "  asks: {102.000000000: 25, 103.000000000: 10}\n";
-  std::cout << "Instrument 910002:\n";
-  std::cout << "  bids: {249.000000000: 20}\n";
-  std::cout << "  asks: {251.000000000: 15}\n";
-  std::cout << "\nDone\n";
+int main() {
+  const std::string folder = "/home/user/Workspace/back-tester-2026/tests_json";
+  run<transport::FlatSyncedQueue>("flat_1", folder, 1);
+  run<transport::HierarchicalSyncedQueue>("hierarchical_1", folder, 1);
+  run<transport::FlatSyncedQueue>("flat_4", folder, 4);
+  run<transport::HierarchicalSyncedQueue>("hierarchical_4", folder, 4);
 
   return 0;
 }

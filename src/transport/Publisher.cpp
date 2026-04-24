@@ -54,4 +54,4 @@ template <typename QueueT> void PublisherT<QueueT>::stop() {
 template class PublisherT<FlatSyncedQueue>;
 template class PublisherT<HierarchicalSyncedQueue>;
 
-} // namespace transport
+} 

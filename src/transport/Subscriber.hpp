@@ -43,4 +43,4 @@ private:
 
 using QueueSubscriber = QueueSubscriberT<FlatSyncedQueue>;
 using HierarchicalQueueSubscriber = QueueSubscriberT<HierarchicalSyncedQueue>;
-} // namespace transport
+} 
