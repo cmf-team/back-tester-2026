@@ -3,6 +3,14 @@ name = "back-tester"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "back-tester"
+path = "src/main.rs"
+
+[[bin]]
+name = "lob-runner"
+path = "src/bin/lob_runner.rs"
+
 [dependencies]
 chrono = { version = "0.4", features = ["serde"] }
 rust_decimal = { version = "1", features = ["serde-with-str"] }
