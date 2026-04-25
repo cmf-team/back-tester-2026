@@ -70,12 +70,13 @@ struct MktSecId {
 
 struct MarketDataEvent {
   uint64_t ts_recv, ts_event, ts_out;
-  std::string action, side, symbol;
+  std::string action, symbol;
+  Side side;
   int32_t ts_in_delta;
-  int64_t rtype, publisher_id, sequence;
-  size_t flags, channel_id, order_id, instrument_id;
-  Price price;
-  Quantity size;
+  int64_t rtype, publisher_id, sequence, order_id;
+
+  size_t flags, channel_id, instrument_id;
+  int64_t price, size;
 };
 
 } // namespace cmf

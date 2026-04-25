@@ -1,4 +1,4 @@
-foreach(app hard standard)
+foreach(app hard standard LOB-standard)
     set(TARGET back-tester-parser-${app})
     add_executable(${TARGET} ${app}.cpp ParserUtils.cpp)
     target_include_directories(${TARGET} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

@@ -10,6 +10,14 @@ namespace cmf {
 
 namespace {
 
+Side parseSide(std::string_view s) {
+  if (s == "B")
+    return Side::Buy;
+  if (s == "A")
+    return Side::Sell;
+  return Side::None;
+}
+
 uint64_t parseTimestampNanos(const std::string &ts_str) {
   std::chrono::sys_time<std::chrono::nanoseconds> tp;
   std::istringstream ss(ts_str);
@@ -39,14 +47,14 @@ void parseNdjsonFile(const std::string &path,
       event.ts_out = parseOptTs(line["ts_out"].get_string());
 
       event.action = std::string(line["action"].get_string().value());
-      event.side = std::string(line["side"].get_string().value());
+      event.side = parseSide(line["side"].get_string().value());
       event.symbol = std::string(line["symbol"].get_string().value());
       event.instrument_id = line["hd"]["instrument_id"].get_uint64();
       event.rtype = line["hd"]["rtype"].get_int64();
       event.publisher_id = line["hd"]["publisher_id"].get_int64();
       event.ts_in_delta = static_cast<int32_t>(line["ts_in_delta"].get_int64());
       event.sequence = line["sequence"].get_int64();
-      event.size = static_cast<double>(line["size"].get_int64());
+      event.size = line["size"].get_int64();
       event.flags = line["flags"].get_uint64();
       event.channel_id = line["channel_id"].get_uint64();
       event.order_id =
@@ -55,7 +63,9 @@ void parseNdjsonFile(const std::string &path,
       event.price =
           price_val.is_null()
               ? UNDEF_PRICE
-              : std::stof(std::string(price_val.get_string().value()));
+              : static_cast<int64_t>(
+                    std::stod(std::string(price_val.get_string().value())) *
+                    1e9);
 
       events.push_back(event);
       if (onEvent) {
