@@ -7,11 +7,19 @@
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <iosfwd>
 #include <string>
 #include <vector>
 
 namespace cmf {
+
+struct MarketDataEvent;
+
+// Stateless visitor invoked by the dispatcher thread for every event in
+// strict chronological order. Used by Task-2 to fan out into per-instrument
+// LimitOrderBooks. An empty function (default) preserves Task-1 behaviour.
+using EventSink = std::function<void(const MarketDataEvent &)>;
 
 enum class MergerKind : std::uint8_t { Flat, Hierarchy };
 
@@ -48,7 +56,8 @@ listMboJsonFiles(const std::filesystem::path &dir);
 // Throws std::runtime_error on any producer error or chronology violation.
 BenchmarkResult runHardTask(const std::vector<std::filesystem::path> &files,
                             MergerKind kind, bool verbose,
-                            std::size_t queue_capacity = 64 * 1024);
+                            std::size_t queue_capacity = 64 * 1024,
+                            EventSink sink = {});
 
 // Pretty-prints a BenchmarkResult to `os`.
 void printBenchmarkResult(std::ostream &os, const BenchmarkResult &r);

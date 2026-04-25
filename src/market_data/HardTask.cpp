@@ -3,6 +3,7 @@
 #include "market_data/Consumer.hpp"
 #include "market_data/EventSource.hpp"
 #include "market_data/FileProducer.hpp"
+#include "market_data/MarketDataEvent.hpp"
 #include "market_data/Merger.hpp"
 
 #include <algorithm>
@@ -79,7 +80,7 @@ makeMerger(MergerKind kind,
 
 BenchmarkResult runHardTask(const std::vector<std::filesystem::path> &files,
                             MergerKind kind, bool verbose,
-                            std::size_t queue_capacity) {
+                            std::size_t queue_capacity, EventSink sink) {
   BenchmarkResult result;
   result.strategy = toString(kind);
 
@@ -143,6 +144,8 @@ BenchmarkResult runHardTask(const std::vector<std::filesystem::path> &files,
         fingerprint =
             fnv1aMix(fingerprint, static_cast<std::uint64_t>(event.sequence));
 
+        if (sink)
+          sink(event);
         if (verbose)
           processMarketDataEvent(event);
 

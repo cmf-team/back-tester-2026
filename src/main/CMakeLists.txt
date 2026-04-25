@@ -18,6 +18,8 @@ add_executable(${TARGET} main.cpp)
 target_link_libraries(${TARGET} PUBLIC
     back-tester-common
     back-tester-market-data
+    back-tester-order-book
+    back-tester-dispatcher
 )
 if(TARGET back-tester-lib)
     target_link_libraries(back-tester PUBLIC back-tester-lib)

@@ -21,6 +21,8 @@ target_link_libraries(${TARGET} PRIVATE
     Catch2-static-lib
     back-tester-common
     back-tester-market-data
+    back-tester-order-book
+    back-tester-dispatcher
 )
 
 # Register the tests with CTest
