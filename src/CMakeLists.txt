@@ -1,3 +1,6 @@
 add_subdirectory(common)
 add_subdirectory(parser)
+add_subdirectory(lob)
+add_subdirectory(pipeline)
 add_subdirectory(main)
+add_subdirectory(main2)
