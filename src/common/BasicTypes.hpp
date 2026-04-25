@@ -22,8 +22,10 @@ using MarketId = std::uint16_t;   // identifies a market/exchange
 using SecurityId =
     std::uint16_t; // identifies fungible security traded on 1 or more exchanges
 
-using Quantity = double;
-using Price = double;
+using Price = std::int64_t;
+using Quantity = std::int64_t;
+
+inline constexpr Price PriceScale = 1000000000LL;
 
 enum class Side : signed short
 {
