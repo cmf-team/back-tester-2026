@@ -24,9 +24,9 @@ int main(int argc, const char* argv[])
 
         int result = 0;
         if( is_debug_tst)
-            RunDataIngestionFile(file_path);//(argv[1]);
+            result =RunDataIngestionFile(file_path);//(argv[1]);
         else 
-            RunDataIngestionFile(argv[1]);
+            result= RunDataIngestionFile(argv[1]);
 
         std::cout << "Ingestion finished with code: " << result << std::endl;
         return result;

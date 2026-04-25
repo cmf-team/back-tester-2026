@@ -6,3 +6,4 @@ add_dependencies(${TARGET} GenerateVersion)
 
 target_link_libraries(${TARGET} PUBLIC
 )
+
