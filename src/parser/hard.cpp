@@ -1,33 +1,22 @@
+#include "ParserUtils.hpp"
 #include "common/BasicTypes.hpp"
+
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
-#include <ctime>
 #include <filesystem>
-#include <fstream>
 #include <iostream>
 #include <mutex>
 #include <queue>
-#include <simdjson.h>
 #include <string>
-#include <typeinfo>
+#include <thread>
 #include <utility>
 #include <vector>
 
 using MarketDataEvent = cmf::MarketDataEvent;
 
-const int64_t UNDEF_PRICE = INT64_MAX;
-const uint64_t UNDEF_TIMESTAMP = UINT64_MAX;
-
 std::vector<std::vector<MarketDataEvent>> Events(30);
 std::vector<MarketDataEvent> merged_events1, merged_events2;
-
-static uint64_t parseTimestampNanos(const std::string &ts_str) {
-  std::chrono::sys_time<std::chrono::nanoseconds> tp;
-  std::istringstream ss(ts_str);
-  ss >> std::chrono::parse("%Y-%m-%dT%H:%M:%S%Z", tp);
-  return static_cast<uint64_t>(tp.time_since_epoch().count());
-}
 
 void processMarketDataEvent(const MarketDataEvent &order) { return; }
 // --- Shared state ---
@@ -58,48 +47,7 @@ void consumer(int id) {
       global_file_id++;
     } // Lock released here — process file without holding mutex
 
-    simdjson::ondemand::parser parser;
-    simdjson::padded_string json = simdjson::padded_string::load(file);
-    simdjson::ondemand::document_stream lines = parser.iterate_many(json);
-
-    for (auto line : lines) {
-      // handling only valid messages, otherwise skips it
-      try {
-        MarketDataEvent event;
-        auto parseOptTs =
-            [&](simdjson::simdjson_result<std::string_view> res) -> uint64_t {
-          return res.error() ? UNDEF_TIMESTAMP
-                             : parseTimestampNanos(std::string(res.value()));
-        };
-        event.ts_recv = parseOptTs(line["ts_recv"].get_string());
-        event.ts_event = parseOptTs(line["hd"]["ts_event"].get_string());
-        event.ts_out = parseOptTs(line["ts_out"].get_string());
-
-        event.action = std::string(line["action"].get_string().value());
-        event.side = std::string(line["side"].get_string().value());
-        event.symbol = std::string(line["symbol"].get_string().value());
-        event.instrument_id = line["hd"]["instrument_id"].get_uint64();
-        event.rtype = line["hd"]["rtype"].get_int64();
-        event.publisher_id = line["hd"]["publisher_id"].get_int64();
-        event.ts_in_delta =
-            static_cast<int32_t>(line["ts_in_delta"].get_int64());
-        event.sequence = line["sequence"].get_int64();
-        event.size = line["size"].get_int64();
-        event.flags = line["flags"].get_uint64();
-        event.channel_id = line["channel_id"].get_uint64();
-        event.order_id =
-            std::stoull(std::string(line["order_id"].get_string().value()));
-        auto price_val = line["price"];
-        event.price =
-            price_val.is_null()
-                ? UNDEF_PRICE
-                : std::stof(std::string(price_val.get_string().value()));
-
-        Events[file_id].push_back(event);
-      } catch (...) {
-        continue;
-      }
-    }
+    cmf::parseNdjsonFile(file, Events[file_id]);
   }
 }
 

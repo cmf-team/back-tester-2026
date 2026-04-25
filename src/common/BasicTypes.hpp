@@ -72,9 +72,10 @@ struct MarketDataEvent {
   uint64_t ts_recv, ts_event, ts_out;
   std::string action, side, symbol;
   int32_t ts_in_delta;
-  int64_t rtype, publisher_id, sequence, size;
+  int64_t rtype, publisher_id, sequence;
   size_t flags, channel_id, order_id, instrument_id;
-  float price;
+  Price price;
+  Quantity size;
 };
 
 } // namespace cmf

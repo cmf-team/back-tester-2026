@@ -279,3 +279,12 @@ __marimo__/
 # Ignore all local history of files
 .history
 .ionide
+
+# Data
+data
+
+# MacOS garbage
+.DS_Store
+
+# Vim garbage
+*.swp
