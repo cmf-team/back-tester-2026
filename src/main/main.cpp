@@ -1,163 +1,145 @@
+#include "LimitOrderBook.hpp"
 #include "common/MarketDataEvent.hpp"
+#include <chrono>
 #include <fstream>
-#include <iomanip>
 #include <iostream>
 #include <nlohmann/json.hpp>
 #include <string>
-#include <vector>
+#include <unordered_map>
 
 using namespace cmf;
 using json = nlohmann::json;
 
-constexpr int64_t UNDEF_PRICE_INT = 9223372036854775807LL;
-
-uint64_t getSafeUint64(const json &j, const std::string &key) {
-  if (!j.contains(key) || j[key].is_null())
-    return 0ULL;
-  if (j[key].is_string())
-    return std::stoull(j[key].get<std::string>());
-  return j[key].get<uint64_t>();
+int64_t getSafeInt64(const json& j, const std::string& k)
+{
+    if (!j.contains(k) || j[k].is_null())
+        return 0LL;
+    return j[k].is_string() ? std::stoll(j[k].get<std::string>()) : j[k].get<int64_t>();
+}
+uint64_t getSafeUint64(const json& j, const std::string& k)
+{
+    if (!j.contains(k) || j[k].is_null())
+        return 0ULL;
+    return j[k].is_string() ? std::stoull(j[k].get<std::string>()) : j[k].get<uint64_t>();
+}
+uint32_t getSafeUint32(const json& j, const std::string& k)
+{
+    if (!j.contains(k) || j[k].is_null())
+        return 0;
+    return j[k].is_string() ? static_cast<uint32_t>(std::stoul(j[k].get<std::string>())) : j[k].get<uint32_t>();
+}
+double getSafePrice(const json& j, const std::string& k)
+{
+    if (!j.contains(k) || j[k].is_null())
+        return 0.0;
+    if (j[k].is_string())
+        return std::stod(j[k].get<std::string>());
+    if (j[k].is_number_integer())
+    {
+        int64_t r = j[k].get<int64_t>();
+        return (r == 9223372036854775807LL) ? 0.0 : static_cast<double>(r) / 1e9;
+    }
+    return j[k].get<double>();
+}
+double getSafeDouble(const json& j, const std::string& k)
+{
+    if (!j.contains(k) || j[k].is_null())
+        return 0.0;
+    return j[k].is_string() ? std::stod(j[k].get<std::string>()) : j[k].get<double>();
+}
+std::string getSafeString(const json& j, const std::string& k)
+{
+    if (!j.contains(k) || j[k].is_null() || !j[k].is_string())
+        return "N";
+    return j[k].get<std::string>();
 }
 
-int64_t getSafeInt64(const json &j, const std::string &key) {
-  if (!j.contains(key) || j[key].is_null())
-    return 0LL;
-  if (j[key].is_string())
-    return std::stoll(j[key].get<std::string>());
-  return j[key].get<int64_t>();
+Side mapDatabentoSide(const std::string& s)
+{
+    if (s.empty())
+        return Side::None;
+    return (s[0] == 'A') ? Side::Sell : ((s[0] == 'B') ? Side::Buy : Side::None);
+}
+Action mapAction(const std::string& a)
+{
+    return a.empty() ? Action::None : static_cast<Action>(a[0]);
 }
 
-double getSafePrice(const json &j, const std::string &key) {
-  if (!j.contains(key) || j[key].is_null())
-    return 0.0;
-  if (j[key].is_string())
-    return std::stod(j[key].get<std::string>());
-
-  if (j[key].is_number_integer()) {
-    int64_t raw_price = j[key].get<int64_t>();
-    if (raw_price == UNDEF_PRICE_INT)
-      return 0.0;
-    return static_cast<double>(raw_price) / 1e9;
-  }
-
-  return j[key].get<double>();
-}
-
-double getSafeDouble(const json &j, const std::string &key) {
-  if (!j.contains(key) || j[key].is_null())
-    return 0.0;
-  if (j[key].is_string())
-    return std::stod(j[key].get<std::string>());
-  return j[key].get<double>();
-}
-
-std::string getSafeString(const json &j, const std::string &key) {
-  if (!j.contains(key) || j[key].is_null())
-    return "N";
-  if (!j[key].is_string())
-    return "N";
-  return j[key].get<std::string>();
-}
-
-Side mapDatabentoSide(const std::string &sideStr) {
-  if (sideStr.empty())
-    return Side::None;
-  if (sideStr[0] == 'A')
-    return Side::Sell;
-  if (sideStr[0] == 'B')
-    return Side::Buy;
-  return Side::None;
-}
-
-Action mapAction(const std::string &actionStr) {
-  if (actionStr.empty())
-    return Action::None;
-  return static_cast<Action>(actionStr[0]);
-}
-
-void processMarketDataEvent(const MarketDataEvent &order) {
-  std::cout << "TS: " << order.timestamp << " | OrderID: " << order.order_id
-            << " | Side: "
-            << (order.side == Side::Buy
-                    ? "Buy "
-                    : (order.side == Side::Sell ? "Sell" : "None"))
-            << " | Price: " << std::fixed << std::setprecision(5) << order.price
-            << " | Size: " << order.size
-            << " | Action: " << static_cast<char>(order.action) << "\n";
-}
-
-int main(int argc, const char *argv[]) {
-  if (argc < 2) {
-    std::cerr << "Usage: " << argv[0] << " <path_to_ndjson_file>\n";
-    return 1;
-  }
-
-  std::ifstream file(argv[1]);
-  if (!file.is_open()) {
-    std::cerr << "Failed to open file: " << argv[1] << "\n";
-    return 1;
-  }
-
-  std::string line;
-  size_t processedCount = 0;
-  NanoTime firstTs = 0;
-  NanoTime lastTs = 0;
-
-  std::vector<MarketDataEvent> first10;
-  std::vector<MarketDataEvent> last10;
-
-  try {
-    while (std::getline(file, line)) {
-      if (line.empty())
-        continue;
-
-      json j = json::parse(line);
-      MarketDataEvent event;
-
-      event.timestamp = getSafeInt64(j, "ts_recv");
-      if (event.timestamp == 0) {
-        event.timestamp = getSafeInt64(j, "ts_event");
-      }
-
-      event.order_id = getSafeUint64(j, "order_id");
-      event.price = getSafePrice(j, "price");
-      event.size = getSafeDouble(j, "size");
-      event.side = mapDatabentoSide(getSafeString(j, "side"));
-      event.action = mapAction(getSafeString(j, "action"));
-
-      if (processedCount == 0)
-        firstTs = event.timestamp;
-      lastTs = event.timestamp;
-
-      if (processedCount < 10) {
-        first10.push_back(event);
-      }
-      if (last10.size() >= 10) {
-        last10.erase(last10.begin());
-      }
-      last10.push_back(event);
-
-      processedCount++;
+int main(int argc, const char* argv[])
+{
+    if (argc < 2)
+    {
+        std::cerr << "Usage: " << argv[0] << " <path_to_ndjson_file>\n";
+        return 1;
     }
 
-    std::cout << "\n=== Ingestion Summary ===\n";
-    std::cout << "Total messages processed: " << processedCount << "\n";
-    std::cout << "First Timestamp: " << firstTs << "\n";
-    std::cout << "Last Timestamp:  " << lastTs << "\n\n";
+    std::ifstream file(argv[1]);
+    if (!file.is_open())
+        return 1;
 
-    std::cout << "--- First 10 Events ---\n";
-    for (const auto &ev : first10)
-      processMarketDataEvent(ev);
+    std::unordered_map<uint32_t, LimitOrderBook> lobs;
 
-    std::cout << "\n--- Last 10 Events ---\n";
-    for (const auto &ev : last10)
-      processMarketDataEvent(ev);
+    std::string line;
+    size_t processedCount = 0;
+    uint32_t sample_instr_id = 0;
 
-  } catch (const std::exception &ex) {
-    std::cerr << "Back-tester threw an exception during ingestion: "
-              << ex.what() << std::endl;
-    return 1;
-  }
+    std::cout << "Starting Sequential LOB Reconstruction...\n";
+    auto start_time = std::chrono::high_resolution_clock::now();
 
-  return 0;
+    try
+    {
+        while (std::getline(file, line))
+        {
+            if (line.empty())
+                continue;
+
+            json j = json::parse(line);
+            MarketDataEvent event;
+
+            event.timestamp = getSafeInt64(j, "ts_recv");
+            if (event.timestamp == 0)
+                event.timestamp = getSafeInt64(j, "ts_event");
+
+            event.instrument_id = getSafeUint32(j, "instrument_id");
+            event.order_id = getSafeUint64(j, "order_id");
+            event.price = getSafePrice(j, "price");
+            event.size = getSafeDouble(j, "size");
+            event.side = mapDatabentoSide(getSafeString(j, "side"));
+            event.action = mapAction(getSafeString(j, "action"));
+
+            if (processedCount == 0)
+                sample_instr_id = event.instrument_id;
+
+            lobs[event.instrument_id].apply(event);
+
+            processedCount++;
+
+            if (processedCount % 500000 == 0)
+            {
+                lobs[sample_instr_id].printSnapshot(sample_instr_id, event.timestamp);
+            }
+        }
+
+        auto end_time = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> diff = end_time - start_time;
+
+        std::cout << "\n====== PERFORMANCE STATISTICS ======\n";
+        std::cout << "Total events processed:   " << processedCount << "\n";
+        std::cout << "Processing time:          " << std::fixed << std::setprecision(2) << diff.count() << " sec\n";
+        std::cout << "Throughput:               " << static_cast<int>(processedCount / diff.count()) << " events/sec\n";
+        std::cout << "Unique Instruments in LOB:" << lobs.size() << "\n\n";
+
+        if (!lobs.empty())
+        {
+            std::cout << "Final Best Bid/Ask for Instrument " << sample_instr_id << ":\n";
+            lobs[sample_instr_id].printBest();
+        }
+    }
+    catch (const std::exception& ex)
+    {
+        std::cerr << "Exception: " << ex.what() << std::endl;
+        return 1;
+    }
+
+    return 0;
 }
