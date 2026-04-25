@@ -1,7 +1,7 @@
 #pragma once
 
-#include "Parser.hpp"
-#include "data_ingestion/MarketDataEvent.hpp"
+#include "../Parser.hpp"
+#include "common/MarketDataEvent.hpp"
 
 namespace cmf::parser{
     class JSONParser: public MDParser {

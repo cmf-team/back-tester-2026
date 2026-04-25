@@ -1,3 +1,5 @@
+#define _GNU_SOURCE
+
 #include "JSONParser.hpp"
 #include <cctype>
 #include <cstdlib>

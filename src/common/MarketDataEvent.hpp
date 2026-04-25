@@ -1,6 +1,6 @@
 #pragma once
 
-#include "common/BasicTypes.hpp"
+#include "BasicTypes.hpp"
 #include "enums.hpp"
 #include <optional>
 

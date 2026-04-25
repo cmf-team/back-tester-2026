@@ -1,7 +1,7 @@
 #pragma once
 
-#include "MarketDataEvent.hpp"
-#include "parsers/JSONParser.hpp"
+#include "common/MarketDataEvent.hpp"
+#include "parsers/json/JSONParser.hpp"
 #include <fstream>
 #include <stdexcept>
 #include <string>

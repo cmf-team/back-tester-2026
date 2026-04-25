@@ -1,5 +1,5 @@
 #pragma once
-#include "data_ingestion/MarketDataEvent.hpp"
+#include "common/MarketDataEvent.hpp"
 #include <string>
 
 namespace cmf::parser{
