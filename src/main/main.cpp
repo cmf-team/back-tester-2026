@@ -5,6 +5,7 @@
 #include "main/LimitOrderBook.hpp"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cinttypes>
 #include <cstdio>
@@ -12,6 +13,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -46,6 +48,65 @@ struct RuntimeOptions {
     RunVariant variant = RunVariant::Standard;
     MergeMode merge_mode = MergeMode::Flat;
     std::filesystem::path input;
+};
+
+struct SnapshotInstrument {
+    uint32_t instrument_id = 0;
+    LimitOrderBook::Bbo bbo{};
+};
+
+struct SnapshotTask {
+    bool stop = false;
+    std::size_t event_count = 0;
+    uint32_t count = 0;
+    std::array<SnapshotInstrument, 3> instruments{};
+};
+
+class SnapshotPrinterWorker {
+public:
+    void start() {
+        thread_ = std::thread([this]() { run(); });
+    }
+
+    void enqueue(const SnapshotTask& task) {
+        queue_.push(task);
+    }
+
+    void stop_and_join() {
+        SnapshotTask stop_task{};
+        stop_task.stop = true;
+        queue_.push(stop_task);
+        if (thread_.joinable()) {
+            thread_.join();
+        }
+    }
+
+private:
+    void run() {
+        SnapshotTask task{};
+        for (;;) {
+            queue_.pop(task);
+            if (task.stop) {
+                break;
+            }
+
+            std::printf("\n=== SNAPSHOT @ event %zu ===\n", task.event_count);
+            for (uint32_t i = 0; i < task.count; ++i) {
+                const auto& s = task.instruments[i];
+                std::printf(
+                    "instrument=%u best_bid=%0.9f x %" PRId64 " | best_ask=%0.9f x %" PRId64 "\n",
+                    s.instrument_id,
+                    LimitOrderBook::to_double_price(s.bbo.bid_px),
+                    s.bbo.bid_qty,
+                    LimitOrderBook::to_double_price(s.bbo.ask_px),
+                    s.bbo.ask_qty
+                );
+            }
+        }
+    }
+
+    SpscQueue<SnapshotTask, 1024> queue_{};
+    std::thread thread_{};
 };
 
 static bool is_book_update_action(char action) noexcept {
@@ -119,22 +180,26 @@ static void print_final_bbo(const BookStore& books) {
     }
 }
 
-static void maybe_print_snapshot(
+static void maybe_enqueue_snapshot(
     std::size_t event_count,
     const BookStore& books,
     const std::vector<std::size_t>& marks,
-    std::size_t& next_mark
+    std::size_t& next_mark,
+    SnapshotPrinterWorker& worker
 ) {
     if (next_mark >= marks.size()) return;
     if (event_count < marks[next_mark]) return;
 
-    std::printf("\n=== SNAPSHOT @ event %zu ===\n", event_count);
-    int printed = 0;
+    SnapshotTask task{};
+    task.event_count = event_count;
     for (const auto& [instrument_id, book] : books) {
-        if (printed >= 3) break;
-        book.print_snapshot(instrument_id);
-        ++printed;
+        if (task.count >= task.instruments.size()) break;
+        task.instruments[task.count].instrument_id = instrument_id;
+        task.instruments[task.count].bbo = book.best_bid_ask();
+        ++task.count;
     }
+
+    worker.enqueue(task);
     ++next_mark;
 }
 
@@ -152,6 +217,8 @@ static Result run(Merger& merger,
     orders.reserve(1 << 20);
     const std::vector<std::size_t> snapshot_marks{50'000, 250'000, 1'000'000};
     std::size_t next_snapshot = 0;
+    SnapshotPrinterWorker snapshot_worker{};
+    snapshot_worker.start();
 
     auto t0 = std::chrono::steady_clock::now();
 
@@ -166,7 +233,7 @@ static Result run(Merger& merger,
         r.last_ts = e.ts_recv;
         ++r.count;
         apply_event_to_book(e, books, orders);
-        maybe_print_snapshot(r.count, books, snapshot_marks, next_snapshot);
+        maybe_enqueue_snapshot(r.count, books, snapshot_marks, next_snapshot, snapshot_worker);
     }
 
     auto t1 = std::chrono::steady_clock::now();
@@ -181,6 +248,7 @@ static Result run(Merger& merger,
     std::printf("Throughput     : %.0f msg/s\n", r.count / sec);
     std::printf("Books tracked  : %zu\n", books.size());
     std::printf("Active orders  : %zu\n", orders.size());
+    snapshot_worker.stop_and_join();
     print_final_bbo(books);
 
     return r;
