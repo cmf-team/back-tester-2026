@@ -3,7 +3,10 @@
 #include <array>
 #include <thread>
 #include <cstddef>
+
+#if defined(__x86_64__) || defined(__i386__)
 #include <immintrin.h>
+#endif
 
 namespace cmf {
 
@@ -82,7 +85,11 @@ private:
 
     static inline void backoff(int& attempts) noexcept {
         if (attempts < 48) {
+#if defined(__x86_64__) || defined(__i386__)
             _mm_pause();
+#else
+            std::this_thread::yield();
+#endif
         } else {
             std::this_thread::yield();
             attempts = 0;

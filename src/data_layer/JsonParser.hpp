@@ -3,6 +3,7 @@
 #include "common/BasicTypes.hpp"
 #include <optional>
 #include <charconv>
+#include <cstdlib>
 #include <string_view>
 #include <cstring>
 
@@ -79,17 +80,24 @@ inline std::optional<MarketDataEvent> parse_mbo_line(std::string_view line) noex
         return true;
     };
 
-    auto parse_str_num = [&](auto& out) -> bool {
+    auto parse_price = [&](double& out) -> bool {
         if (p < end && *p == '"') {
             ++p;
             const char* q = static_cast<const char*>(memchr(p, '"', end - p));
             if (!q) return false;
-            auto [ptr, ec] = std::from_chars(p, q, out);
-            if (ec != std::errc{}) return false;
+            std::string tmp(p, static_cast<std::size_t>(q - p));
+            char* parsed_end = nullptr;
+            out = std::strtod(tmp.c_str(), &parsed_end);
+            if (parsed_end != tmp.c_str() + tmp.size()) return false;
             p = q + 1;
             return true;
         }
-        return parse_int(out);
+
+        char* parsed_end = nullptr;
+        out = std::strtod(p, &parsed_end);
+        if (parsed_end == p) return false;
+        p = parsed_end;
+        return true;
     };
 
     MarketDataEvent e{};
@@ -122,7 +130,7 @@ inline std::optional<MarketDataEvent> parse_mbo_line(std::string_view line) noex
     if (!find_next(R"("price":)") || !expect(R"("price":)")) return std::nullopt;
     if (p + 4 <= end && memcmp(p, "null", 4) == 0) {
         p += 4;
-    } else if (!parse_str_num(e.price)) {
+    } else if (!parse_price(e.price)) {
         return std::nullopt;
     }
 

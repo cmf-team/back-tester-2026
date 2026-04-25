@@ -52,8 +52,8 @@ public:
 
     void start() {
         for (auto& s : specs_) {
-            threads_.emplace_back([&]() {
-                merge_two(*s.left, *s.right, *s.out);
+            threads_.emplace_back([left = s.left, right = s.right, out = s.out]() {
+                merge_two(*left, *right, *out);
             });
         }
     }
