@@ -35,31 +35,12 @@ namespace cmf {
         }
 
 
-        std::uint32_t target = ev.instrument_id;
-
-        if (ev.action == Action::Cancel || ev.action == Action::Modify) {
-            auto it = order_to_instr_.find(ev.order_id);
-            if (it != order_to_instr_.end()) {
-                target = it->second;
-            }
-        }
-
-        if (target == 0) {
+        if (ev.instrument_id == 0) {
             return false;
         }
 
-        auto &lob = book(target);
-        bool changed = lob.apply(ev);
-
-
-        if (ev.action == Action::Add) {
-            order_to_instr_[ev.order_id] = target;
-        } else if (ev.action == Action::Cancel) {
-            order_to_instr_.erase(ev.order_id);
-        } else if (ev.action == Action::Clear) {
-        }
-
-        return changed;
+        auto &lob = book(ev.instrument_id);
+        return lob.apply(ev);
     }
 
     void MarketDataDispatcher::printSnapshot(std::ostream &os,

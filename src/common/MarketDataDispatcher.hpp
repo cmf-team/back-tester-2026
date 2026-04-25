@@ -40,8 +40,5 @@ namespace cmf {
     private:
         std::unordered_map<std::uint32_t, LimitOrderBook> books_;
         std::unordered_map<std::uint32_t, std::string> symbols_;
-
-
-        std::unordered_map<std::uint64_t, std::uint32_t> order_to_instr_;
     };
 } // namespace cmf
