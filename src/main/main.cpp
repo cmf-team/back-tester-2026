@@ -98,9 +98,21 @@ int main(int argc, const char* argv[])
 
             event.timestamp = getSafeInt64(j, "ts_recv");
             if (event.timestamp == 0)
-                event.timestamp = getSafeInt64(j, "ts_event");
+            {
+                if (j.contains("hd") && j["hd"].contains("ts_event"))
+                {
+                    event.timestamp = getSafeInt64(j["hd"], "ts_event");
+                }
+            }
 
-            event.instrument_id = getSafeUint32(j, "instrument_id");
+            if (j.contains("hd") && j["hd"].contains("instrument_id"))
+            {
+                event.instrument_id = getSafeUint32(j["hd"], "instrument_id");
+            }
+            else
+            {
+                event.instrument_id = getSafeUint32(j, "instrument_id");
+            }
             event.order_id = getSafeUint64(j, "order_id");
             event.price = getSafePrice(j, "price");
             event.size = getSafeDouble(j, "size");
