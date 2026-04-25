@@ -1,111 +1,124 @@
-// main function for the back-tester app
-// please, keep it minimalistic
+// Event-driven back-tester: single-file NDJSON → per-instrument LOB dispatcher.
 
-#include "common/BasicTypes.hpp"
+#include "common/LimitOrderBook.hpp"
 #include "common/MarketDataEvent.hpp"
 #include "common/MarketDataParser.hpp"
+
 #include <chrono>
-#include <deque>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
+#include <string>
+#include <unordered_map>
 #include <vector>
 
-using namespace cmf;
-
-void processMarketDataEvent(const MarketDataEvent& event)
+// Print a snapshot for every tracked instrument.
+static void printAllBooks(
+    const std::unordered_map<uint32_t, LimitOrderBook>& books,
+    std::size_t event_count)
 {
-    std::cout << "sort_ts=" << event.sort_ts << ", ts_event=" << event.ts_event
-              << ", order_id=" << event.order_id
-              << ", instrument_id=" << event.instrument_id
-              << ", side=" << MarketDataEvent::sideToString(event.side)
-              << ", price=" << MarketDataEvent::priceToDouble(event.price)
-              << ", size=" << event.size
-              << ", action=" << MarketDataEvent::actionToString(event.action)
-              << ", flags=" << MarketDataEvent::flagToString(event.flag)
-              << ", rtype=" << MarketDataEvent::rTypeToString(event.rtype)
-              << std::endl;
+    std::cout << "\n[Snapshot at event " << event_count << "]\n";
+    for (const auto& [id, book] : books)
+        book.printSnapshot(id, 5);
 }
 
 int main(int argc, const char* argv[])
 {
-    // 1. Argument Check
     if (argc < 2)
     {
-        std::cerr << "Error: No file path provided.\n";
-        std::cerr << "Usage: ${BIN}/back-tester <path_to_json_file>\n";
+        std::cerr << "Usage: back-tester <path_to_ndjson_file>\n";
         return 1;
     }
 
-    const std::string file_path = argv[1];
-    std::ifstream file(file_path);
+    std::ifstream file(argv[1]);
     if (!file.is_open())
     {
-        std::cerr << "Error: Could not open file " << file_path << "\n";
+        std::cerr << "Error: could not open " << argv[1] << "\n";
         return 1;
     }
 
-    // 2. State for Summary
-    std::size_t count = 0;
-    uint64_t first_ts = 0, last_ts = 0;
-    std::vector<MarketDataEvent> first_10;
-    std::deque<MarketDataEvent> last_10;
-    std::chrono::time_point<std::chrono::steady_clock> start, end;
-    std::size_t totalLineTime = 0;
+    // ── Book registry ─────────────────────────────────────────────────────────
+    // One LimitOrderBook per instrument_id, created on first event.
+    std::unordered_map<uint32_t, LimitOrderBook> books;
 
-    // 3. Line-by-line Processing
+    // ── Snapshot schedule ────────────────────────────────────────────────────
+    // Print an intermediate snapshot at each of these event counts.
+    const std::vector<std::size_t> snapshot_at = {10'000, 100'000, 500'000};
+    std::size_t next_snapshot_idx = 0;
+
+    // ── Processing loop (single producer — one file, already sorted) ─────────
+    std::size_t total_events = 0;
+    std::size_t skipped = 0;
+
+    const auto wall_start = std::chrono::steady_clock::now();
+
     std::string line;
     while (std::getline(file, line))
     {
-        start = std::chrono::steady_clock::now();
         if (line.empty())
             continue;
 
-        auto event_opt = parseNDJSON(line);
-        if (!event_opt)
+        auto ev_opt = parseNDJSON(line);
+        if (!ev_opt)
+        {
+            ++skipped;
             continue;
+        }
 
-        const auto& ev = *event_opt;
+        // Route event to the correct book (create on first sight).
+        const MarketDataEvent& ev = *ev_opt;
+        books[ev.instrument_id].applyEvent(ev);
+        ++total_events;
 
-        // Collect stats
-        if (count == 0)
-            first_ts = ev.sort_ts;
-        last_ts = ev.sort_ts;
-
-        if (first_10.size() < 10)
-            first_10.push_back(ev);
-        last_10.push_back(ev);
-        if (last_10.size() > 10)
-            last_10.pop_front();
-
-        // Verification Consumer
-        // processMarketDataEvent(ev); // Uncomment to see every message
-        end = std::chrono::steady_clock::now();
-        totalLineTime +=
-            std::chrono::duration_cast<std::chrono::nanoseconds>(end - start)
-                .count();
-
-        count++;
+        // Intermediate snapshots.
+        if (next_snapshot_idx < snapshot_at.size() &&
+            total_events == snapshot_at[next_snapshot_idx])
+        {
+            printAllBooks(books, total_events);
+            ++next_snapshot_idx;
+        }
     }
 
-    // 4. Verification Output
-    std::cout << "\n--- Objective 1 Verification ---\n";
-    std::cout << "First 10 Events:\n";
-    for (const auto& e : first_10)
+    const auto wall_end = std::chrono::steady_clock::now();
+    const auto elapsed_ns =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(wall_end - wall_start).count();
+
+    // ── Final snapshots ───────────────────────────────────────────────────────
+    printAllBooks(books, total_events);
+
+    // ── Final best bid/ask per instrument ────────────────────────────────────
+    std::cout << "\n--- Final Best Bid/Ask ---\n";
+    std::cout << std::fixed << std::setprecision(9);
+    for (const auto& [id, book] : books)
     {
-        processMarketDataEvent(e);
+        std::cout << "  instrument_id=" << std::setw(8) << id << ":";
+        const auto bb = book.bestBid();
+        const auto ba = book.bestAsk();
+        if (bb)
+            std::cout << "  bid=" << MarketDataEvent::priceToDouble(bb->first)
+                      << " x " << bb->second;
+        else
+            std::cout << "  bid=N/A";
+        if (ba)
+            std::cout << "  ask=" << MarketDataEvent::priceToDouble(ba->first)
+                      << " x " << ba->second;
+        else
+            std::cout << "  ask=N/A";
+        std::cout << "\n";
     }
 
-    std::cout << "\nLast 10 Events:\n";
-    for (const auto& e : last_10)
-    {
-        processMarketDataEvent(e);
-    }
+    // ── Performance statistics ────────────────────────────────────────────────
+    const double elapsed_s = static_cast<double>(elapsed_ns) * 1e-9;
+    const double events_per_sec = elapsed_s > 0 ? total_events / elapsed_s : 0.0;
 
-    std::cout << "\nSummary:\n";
-    std::cout << "  Total Messages:  " << count << "\n";
-    std::cout << "  Start Timestamp: " << first_ts << " ns\n";
-    std::cout << "  End Timestamp:   " << last_ts << " ns\n";
-    std::cout << "  Line Reading Time: " << totalLineTime << " ns\n";
+    std::cout << "\n--- Performance ---\n";
+    std::cout << "  Total events:  " << total_events << "\n";
+    std::cout << "  Skipped lines: " << skipped << "\n";
+    std::cout << "  Instruments:   " << books.size() << "\n";
+    std::cout << "  Elapsed:       " << std::fixed << std::setprecision(3)
+              << elapsed_s << " s\n";
+    std::cout << "  Throughput:    " << std::fixed << std::setprecision(0)
+              << events_per_sec << " events/s\n";
 
     return 0;
 }
