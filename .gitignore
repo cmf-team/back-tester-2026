@@ -6,6 +6,10 @@ log
 CLAUDE.md
 
 
+### Rust ###
+rust/data/
+rust/target/
+
 ### C++ ###
 # Prerequisites
 *.d
