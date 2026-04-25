@@ -31,3 +31,12 @@ target_link_libraries(hard_task PRIVATE Threads::Threads)
 
 # ── Install ────────────────────────────────────────────────────────────────
 install(TARGETS standard_task hard_task RUNTIME DESTINATION bin)
+
+# ── Homework 2 ──────────────────────────────────────────────
+add_executable(standard_task2 src/standard_task2.cpp)
+target_include_directories(standard_task2 PRIVATE include)
+target_link_libraries(standard_task2 PRIVATE Threads::Threads)
+
+add_executable(hard_task2 src/hard_task2.cpp)
+target_include_directories(hard_task2 PRIVATE include)
+target_link_libraries(hard_task2 PRIVATE Threads::Threads)
