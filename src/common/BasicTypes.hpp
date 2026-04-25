@@ -6,8 +6,8 @@
 #include <string>
 #include <string_view>
 
-namespace cmf {
-
+namespace cmf
+{
   using NanoTime = std::int64_t;
 
   using ClOrdId = std::uint64_t;
