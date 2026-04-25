@@ -3,6 +3,7 @@
 // into Statistics. VariantSource replaces virtual dispatch through
 // IMarketDataSource* with std::visit on a closed set of concrete types.
 
+#include "lob/LobHandler.hpp"
 #include "merge/LoserTreeMerger.hpp"
 #include "parser/FileMarketDataSource.hpp"
 #include "parser/FolderMarketDataSource.hpp"
@@ -10,6 +11,7 @@
 #include "parser/VariantSource.hpp"
 #include "stats/Statistics.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
@@ -30,12 +32,14 @@ using AnySource = VariantSource<FileMarketDataSource, FolderMarketDataSource>;
 template <class Source>
 int runBacktest(Source& src) {
   Statistics      stats;
+  LobHandler      lob;
   MarketDataEvent ev;
 
   const auto    t0          = std::chrono::steady_clock::now();
   std::uint64_t events_read = 0;
   while (src.next(ev)) {
     stats.onEvent(ev);
+    lob.onEvent(ev);
     ++events_read;
   }
   const auto   t1         = std::chrono::steady_clock::now();
@@ -47,6 +51,9 @@ int runBacktest(Source& src) {
             << std::setprecision(0) << msgs_per_s << " msg/s)\n";
 
   std::cout << stats;
+  std::cout << "\n--- LOB best bid/ask (" << lob.bookCount()
+            << " instruments) ---\n";
+  lob.printBestBidAsk(std::cout);
   return 0;
 }
 

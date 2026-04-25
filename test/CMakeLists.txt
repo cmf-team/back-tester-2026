@@ -22,6 +22,7 @@ target_link_libraries(${TARGET} PRIVATE
     back-tester-common
     back-tester-parser
     back-tester-stats
+    back-tester-lob
 )
 
 # Register the tests with CTest

@@ -9,6 +9,7 @@ target_link_libraries(${TARGET} PUBLIC
     back-tester-parser
     back-tester-merge
     back-tester-stats
+    back-tester-lob
 )
 
 # executable
