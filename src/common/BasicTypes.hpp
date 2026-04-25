@@ -57,19 +57,30 @@ enum class SecurityType
     Option
 };
 
+enum class Action : char
+{
+    Add = 'A',
+    Modify = 'M',
+    Cancel = 'C',
+    Clear = 'R',
+    Trade = 'T',
+    Fill = 'F',
+    None = 'N'
+};
+
 // id for an object identifying a specific security traded on a specific market
 struct MarketSecurityId
 {
     MarketId mktId;
     SecurityId secId;
 
-    bool operator==(const MarketSecurityId &other) const = default;
+    bool operator==(const MarketSecurityId& other) const = default;
 };
 
 // hash function for MarketSecurityId
 struct MarketSecurityIdHash
 {
-    std::size_t operator()(const MarketSecurityId &key) const noexcept
+    std::size_t operator()(const MarketSecurityId& key) const noexcept
     {
         std::size_t h1 = std::hash<SecurityId>{}(key.secId);
         std::size_t h2 = std::hash<MarketId>{}(key.mktId);
