@@ -5,7 +5,7 @@ list(REMOVE_ITEM SRC main.cpp)
 set(TARGET back-tester-lib)
 add_library(${TARGET} STATIC ${SRC})
 target_link_libraries(${TARGET} PUBLIC
-    back-tester-common
+        back-tester-common
 )
 
 # executable
