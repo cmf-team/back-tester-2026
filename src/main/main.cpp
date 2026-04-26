@@ -125,6 +125,7 @@ static StreamList collect_streams(int argc, const char* argv[]) {
 }
 
 static void run_standard(const std::filesystem::path& file) {
+    auto t0 = std::chrono::steady_clock::now();
     std::size_t count = 0;
     NanoTime    first_ts = 0, last_ts = 0;
     std::vector<MarketDataEvent> first_events;
@@ -145,15 +146,19 @@ static void run_standard(const std::filesystem::path& file) {
         if (static_cast<int>(last_deq.size()) > N_PREVIEW) last_deq.pop_front();
         count++;
     }
-    prod.join();
+    auto t1 = std::chrono::steady_clock::now();
+    double dt = std::chrono::duration<double>(t1 - t0).count();
 
     std::fprintf(stderr, "First %d events:\n", N_PREVIEW);
     for (auto& e : first_events) processMarketDataEvent(e);
     std::fprintf(stderr, "Last %d events:\n", N_PREVIEW);
     for (auto& e : last_deq) processMarketDataEvent(e);
+
+    std::fprintf(stderr, "\n--- summary ---\n");
     std::fprintf(stderr, "Total messages : %zu\n", count);
     std::fprintf(stderr, "First ts_recv  : %ld\n", first_ts);
     std::fprintf(stderr, "Last ts_recv   : %ld\n", last_ts);
+    std::fprintf(stderr, "elapsed        : %.3f s  (%.0f msg/s)\n", dt, count / dt);
 }
 
 static void run_benchmark(const StreamList& streams) {
