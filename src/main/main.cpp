@@ -1,17 +1,24 @@
 #include "common/MarketDataEvent.hpp"
+#include "dispatch/Dispatcher.hpp"
+#include "dispatch/EventSink.hpp"
+#include "dispatch/LobRegistry.hpp"
 #include "ingestion/EventQueue.hpp"
 #include "ingestion/FlatMerger.hpp"
 #include "ingestion/HierarchyMerger.hpp"
 #include "ingestion/JsonLineParser.hpp"
 #include "ingestion/Producer.hpp"
+#include "lob/LimitOrderBook.hpp"
+#include "lob/OrderIndex.hpp"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstdio>
 #include <deque>
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -101,7 +108,7 @@ static StreamList collect_streams(int argc, const char* argv[]) {
     std::vector<std::filesystem::path> positional;
     for (int i = 1; i < argc; ++i) {
         std::string_view a(argv[i]);
-        if (a == "--suppress-logs") continue;
+        if (a == "--suppress-logs" || a == "--lob" || a == "--bench") continue;
         positional.emplace_back(a);
     }
 
@@ -219,29 +226,129 @@ static void run_benchmark(const StreamList& streams) {
     }
 }
 
+static bool is_flag(std::string_view a) {
+    return a == "--suppress-logs" || a == "--lob" || a == "--bench";
+}
+
+static void print_bbo(const LobRegistry& reg, std::size_t max_books, const char* tag, NanoTime ts) {
+    std::fprintf(stderr, "--- %s @ ts=%ld ---\n", tag, ts);
+    std::size_t k = 0;
+    reg.for_each([&](uint32_t id, const LimitOrderBook& b) {
+        if (k++ >= max_books) return;
+        double bp = 0, ap = 0;
+        LimitOrderBook::AggQty bq = 0, aq = 0;
+        const bool hb = b.best_bid(bp, bq);
+        const bool ha = b.best_ask(ap, aq);
+        if (hb && ha)
+            std::fprintf(stderr, "  inst=%u  bid %.6f x %lu  |  ask %.6f x %lu  (lvl b=%zu a=%zu)\n",
+                         id, bp, bq, ap, aq, b.bid_levels(), b.ask_levels());
+        else if (hb)
+            std::fprintf(stderr, "  inst=%u  bid %.6f x %lu  |  ask -\n", id, bp, bq);
+        else if (ha)
+            std::fprintf(stderr, "  inst=%u  bid -  |  ask %.6f x %lu\n", id, ap, aq);
+        else
+            std::fprintf(stderr, "  inst=%u  empty\n", id);
+    });
+}
+
+class PeriodicBboSink : public EventSink {
+public:
+    PeriodicBboSink(const LobRegistry& reg, std::size_t every) noexcept
+        : reg_(reg), every_(every) {}
+    void on_event(const MarketDataEvent& e, const LimitOrderBook&) override {
+        ++n_;
+        if (every_ && n_ % every_ == 0)
+            print_bbo(reg_, 5, "snapshot", e.ts_recv);
+    }
+private:
+    const LobRegistry& reg_;
+    std::size_t        every_;
+    std::size_t        n_ = 0;
+};
+
+template <class Merger>
+static void drive_lob(Merger& merger, LobRegistry& reg, OrderIndex& idx, EventSink& sink,
+                      const char* label, double dt_setup_t0_to_now) {
+    auto t0 = std::chrono::steady_clock::now();
+    Dispatcher<Merger> disp(merger, reg, idx, sink);
+    disp.run();
+    auto t1 = std::chrono::steady_clock::now();
+    const double dt = std::chrono::duration<double>(t1 - t0).count();
+    (void)dt_setup_t0_to_now;
+
+    std::fprintf(stderr, "\n=== %s ===\n", label);
+    std::fprintf(stderr, "Events processed : %zu\n", disp.events_processed());
+    std::fprintf(stderr, "Trades seen      : %zu\n", disp.trades_seen());
+    std::fprintf(stderr, "Orphans skipped  : %zu\n", disp.orphans_skipped());
+    std::fprintf(stderr, "First ts_recv    : %ld\n", disp.first_ts());
+    std::fprintf(stderr, "Last  ts_recv    : %ld\n", disp.last_ts());
+    std::fprintf(stderr, "Books            : %zu\n", reg.size());
+    std::fprintf(stderr, "Index live orders: %zu\n", idx.size());
+    std::fprintf(stderr, "Wall time        : %.3f s\n", dt);
+    std::fprintf(stderr, "Throughput       : %.0f msg/s\n", disp.events_processed() / dt);
+
+    print_bbo(reg, reg.size(), "final BBO", disp.last_ts());
+}
+
+static void run_lob_pipeline(const StreamList& streams, std::size_t snapshot_every) {
+    std::vector<std::unique_ptr<EventQueue>> queues;
+    std::vector<EventQueue*>                 ptrs;
+    std::vector<std::unique_ptr<Producer>>   producers;
+    queues.reserve(streams.size());
+    ptrs.reserve(streams.size());
+    producers.reserve(streams.size());
+    for (auto& stream : streams) {
+        auto& q = queues.emplace_back(std::make_unique<EventQueue>());
+        ptrs.push_back(q.get());
+        producers.emplace_back(std::make_unique<Producer>(stream, *q));
+    }
+
+    FlatMerger    merger(ptrs);
+    LobRegistry   reg;
+    OrderIndex    idx;
+    PeriodicBboSink periodic(reg, snapshot_every);
+    NullSink        null_sink;
+    EventSink&      sink = snapshot_every ? static_cast<EventSink&>(periodic)
+                                          : static_cast<EventSink&>(null_sink);
+
+    for (auto& p : producers) p->start();
+    merger.start();
+
+    drive_lob(merger, reg, idx, sink, "Flat Merger -> LOB", 0.0);
+
+    for (auto& p : producers) p->join();
+}
+
 int main(int argc, const char* argv[]) {
     if (argc < 2) {
         std::fprintf(stderr,
             "Usage:\n"
-            "  %s <file.mbo.json> [--suppress-logs]          (single file)\n"
-            "  %s <folder1> [folder2 ...] [--suppress-logs]  (each folder = one chained stream)\n",
+            "  %s <file.mbo.json> [--suppress-logs]                   (single file, ingest only)\n"
+            "  %s <folder1> [folder2 ...] [--suppress-logs] [--lob]   (each folder = one chained stream)\n"
+            "    --bench   ingest-only benchmark (default for multi-folder)\n"
+            "    --lob     run full Producer->Merger->Dispatcher->LOB pipeline\n",
             argv[0], argv[0]);
         return 1;
     }
 
-    for (int i = 1; i < argc; ++i)
-        if (std::string_view(argv[i]) == "--suppress-logs") g_suppress_logs = true;
+    bool lob_mode   = false;
+    bool bench_mode = false;
+    for (int i = 1; i < argc; ++i) {
+        std::string_view a(argv[i]);
+        if (a == "--suppress-logs") g_suppress_logs = true;
+        else if (a == "--lob")      lob_mode = true;
+        else if (a == "--bench")    bench_mode = true;
+    }
 
-    // Single-file mode: exactly one non-flag arg that is a regular file.
     int positional_count = 0;
     std::filesystem::path single_file;
     for (int i = 1; i < argc; ++i) {
         std::string_view a(argv[i]);
-        if (a == "--suppress-logs") continue;
+        if (is_flag(a)) continue;
         ++positional_count;
         single_file = a;
     }
-    if (positional_count == 1 && std::filesystem::is_regular_file(single_file)) {
+    if (positional_count == 1 && std::filesystem::is_regular_file(single_file) && !lob_mode) {
         run_standard(single_file);
         return 0;
     }
@@ -255,6 +362,13 @@ int main(int argc, const char* argv[]) {
     std::size_t total_files = 0;
     for (auto& s : streams) total_files += s.size();
     std::fprintf(stderr, "Streams: %zu (total files: %zu)\n", streams.size(), total_files);
-    run_benchmark(streams);
+
+    if (lob_mode) {
+        const std::size_t every = g_suppress_logs ? 0 : 1'000'000;
+        run_lob_pipeline(streams, every);
+    } else {
+        (void)bench_mode;
+        run_benchmark(streams);
+    }
     return 0;
 }

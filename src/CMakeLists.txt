@@ -1,3 +1,5 @@
 add_subdirectory(common)
 add_subdirectory(ingestion)
+add_subdirectory(lob)
+add_subdirectory(dispatch)
 add_subdirectory(main)
