@@ -39,3 +39,25 @@ target_link_libraries(${TGT} PUBLIC INTERFACE
     $<$<CONFIG:Release>:-lCatch2Main -lCatch2>
 )
 
+# ---------------------------------------------------------------------------------------
+# nlohmann json - JSON library
+ExternalProject_Add(
+    nlohmann_json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG v3.11.2
+    GIT_SHALLOW TRUE
+    GIT_PROGRESS TRUE
+    SOURCE_DIR "${CMAKE_SOURCE_DIR}/3rdparty/nlohmann_json"
+    CMAKE_ARGS ${FORWARDED_CMAKE_ARGS}
+    # Skip build/install for header-only library
+    CONFIGURE_COMMAND ""
+    BUILD_COMMAND ""
+    INSTALL_COMMAND ""
+    UPDATE_COMMAND ""
+)
+
+set(TGT nlohmann_json-static-lib)
+add_library(${TGT} INTERFACE)
+add_dependencies(${TGT} nlohmann_json)
+target_include_directories(${TGT} SYSTEM PUBLIC INTERFACE ${CMAKE_BINARY_DIR}/include)
+
