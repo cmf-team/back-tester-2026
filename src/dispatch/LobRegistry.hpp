@@ -22,6 +22,10 @@ public:
         auto it = books_.find(instrument_id);
         return it == books_.end() ? nullptr : it->second.get();
     }
+    const LimitOrderBook* try_get(uint32_t instrument_id) const noexcept {
+        auto it = books_.find(instrument_id);
+        return it == books_.end() ? nullptr : it->second.get();
+    }
 
     std::size_t size() const noexcept { return books_.size(); }
 

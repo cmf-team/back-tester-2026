@@ -2,6 +2,8 @@
 #include "dispatch/Dispatcher.hpp"
 #include "dispatch/EventSink.hpp"
 #include "dispatch/LobRegistry.hpp"
+#include "dispatch/ShardedDispatcher.hpp"
+#include "dispatch/SnapshotSink.hpp"
 #include "ingestion/EventQueue.hpp"
 #include "ingestion/FlatMerger.hpp"
 #include "ingestion/HierarchyMerger.hpp"
@@ -102,13 +104,26 @@ static std::vector<std::filesystem::path> collect_files(const std::filesystem::p
 // sorted by ts_recv (typical for daily Databento files within one instrument folder).
 using StreamList = std::vector<std::vector<std::filesystem::path>>;
 
+static bool is_flag(std::string_view a) {
+    return a == "--suppress-logs" || a == "--lob" || a == "--bench"
+        || a == "--snapshot-out" || a == "--snapshot-every"
+        || a == "--shards";
+}
+
+static bool consumes_value(std::string_view a) {
+    return a == "--snapshot-out" || a == "--snapshot-every" || a == "--shards";
+}
+
 static StreamList collect_streams(int argc, const char* argv[]) {
     StreamList streams;
 
     std::vector<std::filesystem::path> positional;
     for (int i = 1; i < argc; ++i) {
         std::string_view a(argv[i]);
-        if (a == "--suppress-logs" || a == "--lob" || a == "--bench") continue;
+        if (is_flag(a)) {
+            if (consumes_value(a)) ++i;
+            continue;
+        }
         positional.emplace_back(a);
     }
 
@@ -226,10 +241,6 @@ static void run_benchmark(const StreamList& streams) {
     }
 }
 
-static bool is_flag(std::string_view a) {
-    return a == "--suppress-logs" || a == "--lob" || a == "--bench";
-}
-
 static void print_bbo(const LobRegistry& reg, std::size_t max_books, const char* tag, NanoTime ts) {
     std::fprintf(stderr, "--- %s @ ts=%ld ---\n", tag, ts);
     std::size_t k = 0;
@@ -268,13 +279,12 @@ private:
 
 template <class Merger>
 static void drive_lob(Merger& merger, LobRegistry& reg, OrderIndex& idx, EventSink& sink,
-                      const char* label, double dt_setup_t0_to_now) {
+                      const char* label) {
     auto t0 = std::chrono::steady_clock::now();
     Dispatcher<Merger> disp(merger, reg, idx, sink);
     disp.run();
     auto t1 = std::chrono::steady_clock::now();
     const double dt = std::chrono::duration<double>(t1 - t0).count();
-    (void)dt_setup_t0_to_now;
 
     std::fprintf(stderr, "\n=== %s ===\n", label);
     std::fprintf(stderr, "Events processed : %zu\n", disp.events_processed());
@@ -290,7 +300,15 @@ static void drive_lob(Merger& merger, LobRegistry& reg, OrderIndex& idx, EventSi
     print_bbo(reg, reg.size(), "final BBO", disp.last_ts());
 }
 
-static void run_lob_pipeline(const StreamList& streams, std::size_t snapshot_every) {
+struct LobOpts {
+    std::size_t           bbo_print_every  = 0;
+    std::size_t           snapshot_every   = 0;
+    std::filesystem::path snapshot_out;
+    std::size_t           shards           = 0;
+};
+
+static void run_lob_pipeline(const StreamList& streams, const LobOpts& opts) {
+    const std::size_t snapshot_every = opts.bbo_print_every;
     std::vector<std::unique_ptr<EventQueue>> queues;
     std::vector<EventQueue*>                 ptrs;
     std::vector<std::unique_ptr<Producer>>   producers;
@@ -303,20 +321,51 @@ static void run_lob_pipeline(const StreamList& streams, std::size_t snapshot_eve
         producers.emplace_back(std::make_unique<Producer>(stream, *q));
     }
 
-    FlatMerger    merger(ptrs);
-    LobRegistry   reg;
-    OrderIndex    idx;
+    FlatMerger      merger(ptrs);
+    LobRegistry     reg;
+    OrderIndex      idx;
     PeriodicBboSink periodic(reg, snapshot_every);
+    SnapshotSink    snap(reg, opts.snapshot_out, opts.snapshot_every);
     NullSink        null_sink;
-    EventSink&      sink = snapshot_every ? static_cast<EventSink&>(periodic)
-                                          : static_cast<EventSink&>(null_sink);
+    MultiSink       multi;
+    if (snapshot_every)       multi.add(&periodic);
+    if (opts.snapshot_every)  multi.add(&snap);
+    EventSink& sink = (snapshot_every || opts.snapshot_every)
+                          ? static_cast<EventSink&>(multi)
+                          : static_cast<EventSink&>(null_sink);
 
+    snap.start();
     for (auto& p : producers) p->start();
     merger.start();
 
-    drive_lob(merger, reg, idx, sink, "Flat Merger -> LOB", 0.0);
+    if (opts.shards <= 1) {
+        drive_lob(merger, reg, idx, sink, "Flat Merger -> LOB");
+    } else {
+        auto t0 = std::chrono::steady_clock::now();
+        ShardedDispatcher<FlatMerger> sd(merger, idx, opts.shards);
+        sd.run();
+        auto t1 = std::chrono::steady_clock::now();
+        const double dt = std::chrono::duration<double>(t1 - t0).count();
+        std::fprintf(stderr, "\n=== Sharded Dispatcher (N=%zu) ===\n", opts.shards);
+        std::fprintf(stderr, "Events processed : %zu\n", sd.events_processed());
+        std::fprintf(stderr, "Trades seen      : %zu\n", sd.trades_seen());
+        std::fprintf(stderr, "Orphans skipped  : %zu\n", sd.orphans_skipped());
+        std::fprintf(stderr, "First ts_recv    : %ld\n", sd.first_ts());
+        std::fprintf(stderr, "Last  ts_recv    : %ld\n", sd.last_ts());
+        std::fprintf(stderr, "Books total      : %zu\n", sd.total_books());
+        std::fprintf(stderr, "Index live orders: %zu\n", idx.size());
+        std::fprintf(stderr, "Wall time        : %.3f s\n", dt);
+        std::fprintf(stderr, "Throughput       : %.0f msg/s\n", sd.events_processed() / dt);
+        for (std::size_t i = 0; i < sd.shards(); ++i)
+            std::fprintf(stderr, "Shard %zu books: %zu\n", i, sd.registry(i).size());
+    }
 
     for (auto& p : producers) p->join();
+    snap.stop();
+    if (opts.snapshot_every) {
+        std::fprintf(stderr, "Snapshots written: %zu -> %s\n",
+                     snap.frames_published(), opts.snapshot_out.c_str());
+    }
 }
 
 int main(int argc, const char* argv[]) {
@@ -331,13 +380,17 @@ int main(int argc, const char* argv[]) {
         return 1;
     }
 
-    bool lob_mode   = false;
-    bool bench_mode = false;
+    bool    lob_mode   = false;
+    bool    bench_mode = false;
+    LobOpts opts;
     for (int i = 1; i < argc; ++i) {
         std::string_view a(argv[i]);
-        if (a == "--suppress-logs") g_suppress_logs = true;
-        else if (a == "--lob")      lob_mode = true;
-        else if (a == "--bench")    bench_mode = true;
+        if      (a == "--suppress-logs")  g_suppress_logs = true;
+        else if (a == "--lob")            lob_mode = true;
+        else if (a == "--bench")          bench_mode = true;
+        else if (a == "--snapshot-out"   && i + 1 < argc) { opts.snapshot_out  = argv[++i]; }
+        else if (a == "--snapshot-every" && i + 1 < argc) { opts.snapshot_every = std::stoul(argv[++i]); }
+        else if (a == "--shards"         && i + 1 < argc) { opts.shards = std::stoul(argv[++i]); }
     }
 
     int positional_count = 0;
@@ -364,8 +417,8 @@ int main(int argc, const char* argv[]) {
     std::fprintf(stderr, "Streams: %zu (total files: %zu)\n", streams.size(), total_files);
 
     if (lob_mode) {
-        const std::size_t every = g_suppress_logs ? 0 : 1'000'000;
-        run_lob_pipeline(streams, every);
+        opts.bbo_print_every = g_suppress_logs ? 0 : 1'000'000;
+        run_lob_pipeline(streams, opts);
     } else {
         (void)bench_mode;
         run_benchmark(streams);

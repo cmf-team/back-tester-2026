@@ -21,6 +21,7 @@ target_link_libraries(${TARGET} PRIVATE
     Catch2-static-lib
     back-tester-common
     back-tester-lob
+    back-tester-ingestion
     back-tester-dispatch
 )
 
