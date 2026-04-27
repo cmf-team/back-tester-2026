@@ -11,12 +11,15 @@
 #include "parser/VariantSource.hpp"
 #include "stats/Statistics.hpp"
 
+#include "parser/ThreadMarketDataSource.hpp"
+
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -65,6 +68,10 @@ AnySource openSource(const std::filesystem::path& path) {
   throw std::runtime_error("not a file or directory: " + path.string());
 }
 
+// 1024-slot ring per source. A producer thread parks on backpressure, so this
+// is the working-set window between the parser and the merge/stats/lob loop.
+constexpr std::size_t kThreadSourceBuffer = 1024^2;
+
 } // namespace
 
 int main(int argc, const char* argv[]) {
@@ -75,16 +82,26 @@ int main(int argc, const char* argv[]) {
       return 2;
     }
 
-    std::vector<AnySource> sources;
-    // reserve() is mandatory here: the ptrs vector below holds pointers into
-    // `sources`, so any reallocation would dangle them.
-    sources.reserve(static_cast<std::size_t>(argc - 1));
-    for (int i = 1; i < argc; ++i)
-      sources.push_back(openSource(argv[i]));
+    const auto count = static_cast<std::size_t>(argc - 1);
 
-    std::vector<AnySource*> ptrs;
+    // Stable storage for the upstream sources. `reserve` prevents reallocation
+    // so the ThreadMarketDataSource references stay valid.
+    std::vector<AnySource> upstreams;
+    upstreams.reserve(count);
+    for (int i = 1; i < argc; ++i) upstreams.push_back(openSource(argv[i]));
+
+    // ThreadMarketDataSource owns a thread and is non-copyable / non-movable,
+    // so it can't live in a vector by value — wrap each in unique_ptr.
+    std::vector<std::unique_ptr<ThreadMarketDataSource<AnySource>>> sources;
+    sources.reserve(count);
+    for (auto& up : upstreams) {
+      sources.push_back(std::make_unique<ThreadMarketDataSource<AnySource>>(
+          up, kThreadSourceBuffer));
+    }
+
+    std::vector<ThreadMarketDataSource<AnySource>*> ptrs;
     ptrs.reserve(sources.size());
-    for (auto& s : sources) ptrs.push_back(&s);
+    for (auto& s : sources) ptrs.push_back(s.get());
 
     std::cerr << "merging " << sources.size() << " source(s)...\n";
 
