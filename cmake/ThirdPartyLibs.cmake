@@ -39,3 +39,32 @@ target_link_libraries(${TGT} PUBLIC INTERFACE
     $<$<CONFIG:Release>:-lCatch2Main -lCatch2>
 )
 
+# ---------------------------------------------------------------------------------------
+# Google Benchmark - C++ microbenchmark framework
+ExternalProject_Add(
+    GoogleBenchmark
+    GIT_REPOSITORY https://github.com/google/benchmark.git
+    GIT_TAG v1.9.1
+    GIT_SHALLOW TRUE
+    GIT_PROGRESS TRUE
+    SOURCE_DIR "${CMAKE_SOURCE_DIR}/3rdparty/benchmark"
+    BINARY_DIR "${CMAKE_BINARY_DIR}/3rdparty/benchmark"
+    CMAKE_ARGS
+        ${FORWARDED_CMAKE_ARGS}
+        -DBENCHMARK_ENABLE_TESTING=OFF
+        -DBENCHMARK_ENABLE_GTEST_TESTS=OFF
+        -DBENCHMARK_ENABLE_INSTALL=ON
+        -DBENCHMARK_INSTALL_DOCS=OFF
+    BUILD_COMMAND $(MAKE)
+    INSTALL_COMMAND $(MAKE) -s DESTDIR=${DESTDIR} install
+)
+
+set(TGT benchmark-static-lib)
+add_library(${TGT} INTERFACE)
+add_dependencies(${TGT} GoogleBenchmark)
+target_include_directories(${TGT} SYSTEM PUBLIC INTERFACE ${CMAKE_BINARY_DIR}/include)
+target_link_directories(${TGT} PUBLIC INTERFACE ${CMAKE_BINARY_DIR}/lib ${CMAKE_BINARY_DIR}/lib64)
+target_link_libraries(${TGT} PUBLIC INTERFACE
+    -lbenchmark_main -lbenchmark pthread
+)
+

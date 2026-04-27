@@ -1,23 +1,115 @@
-// main function for the back-tester app
-// please, keep it minimalistic
+// back-tester driver: opens one source per CLI arg (file or folder), merges
+// them via LoserTreeMerger over a VariantSource, and feeds the merged stream
+// into Statistics. VariantSource replaces virtual dispatch through
+// IMarketDataSource* with std::visit on a closed set of concrete types.
 
-#include "common/BasicTypes.hpp"
+#include "lob/LobHandler.hpp"
+#include "merge/LoserTreeMerger.hpp"
+#include "parser/FileMarketDataSource.hpp"
+#include "parser/FolderMarketDataSource.hpp"
+#include "parser/MarketDataEvent.hpp"
+#include "parser/VariantSource.hpp"
+#include "stats/Statistics.hpp"
 
+#include "parser/ThreadMarketDataSource.hpp"
+
+#include <algorithm>
+#include <chrono>
+#include <cstdint>
+#include <filesystem>
+#include <iomanip>
 #include <iostream>
+#include <memory>
+#include <stdexcept>
+#include <utility>
+#include <vector>
 
 using namespace cmf;
 
-int main([[maybe_unused]] int argc, [[maybe_unused]] const char *argv[])
-{
-    try
-    {
-        std::cout << "Hell! Oh, world!" << std::endl;
-    }
-    catch (std::exception &ex)
-    {
-        std::cerr << "Back-tester threw an exception: " << ex.what() << std::endl;
-        return 1;
+namespace {
+
+using AnySource = VariantSource<FileMarketDataSource, FolderMarketDataSource>;
+
+// Templated on Source so next() resolves statically and the compiler can
+// inline the parse loop.
+template <class Source>
+int runBacktest(Source& src) {
+  Statistics      stats;
+  LobHandler      lob;
+  MarketDataEvent ev;
+
+  const auto    t0          = std::chrono::steady_clock::now();
+  std::uint64_t events_read = 0;
+  while (src.next(ev)) {
+    stats.onEvent(ev);
+    lob.onEvent(ev);
+    ++events_read;
+  }
+  const auto   t1         = std::chrono::steady_clock::now();
+  const double sec        = std::chrono::duration<double>(t1 - t0).count();
+  const double msgs_per_s = sec > 0.0 ? events_read / sec : 0.0;
+
+  std::cerr << events_read << " events in "
+            << std::fixed << std::setprecision(2) << sec << "s ("
+            << std::setprecision(0) << msgs_per_s << " msg/s)\n";
+
+  std::cout << stats;
+  std::cout << "\n--- LOB best bid/ask (" << lob.bookCount()
+            << " instruments) ---\n";
+  lob.printBestBidAsk(std::cout);
+  return 0;
+}
+
+AnySource openSource(const std::filesystem::path& path) {
+  if (std::filesystem::is_directory(path))
+    return AnySource{FolderMarketDataSource(path)};
+  if (std::filesystem::is_regular_file(path))
+    return AnySource{FileMarketDataSource(path)};
+  throw std::runtime_error("not a file or directory: " + path.string());
+}
+
+// 1M-slot ring per source. A producer thread parks on backpressure, so this
+// is the working-set window between the parser and the merge/stats/lob loop.
+// (`^` in C++ is bitwise XOR, not exponent — use `*` for "1024 squared".)
+constexpr std::size_t kThreadSourceBuffer = 1024 * 1024;
+
+} // namespace
+
+int main(int argc, const char* argv[]) {
+  try {
+    if (argc < 2) {
+      std::cerr << "usage: " << (argc > 0 ? argv[0] : "back-tester")
+                << " <file-or-folder> [<file-or-folder> ...]\n";
+      return 2;
     }
 
-    return 0;
+    const auto count = static_cast<std::size_t>(argc - 1);
+
+    // Stable storage for the upstream sources. `reserve` prevents reallocation
+    // so the ThreadMarketDataSource references stay valid.
+    std::vector<AnySource> upstreams;
+    upstreams.reserve(count);
+    for (int i = 1; i < argc; ++i) upstreams.push_back(openSource(argv[i]));
+
+    // ThreadMarketDataSource owns a thread and is non-copyable / non-movable,
+    // so it can't live in a vector by value — wrap each in unique_ptr.
+    std::vector<std::unique_ptr<ThreadMarketDataSource<AnySource>>> sources;
+    sources.reserve(count);
+    for (auto& up : upstreams) {
+      sources.push_back(std::make_unique<ThreadMarketDataSource<AnySource>>(
+          up, kThreadSourceBuffer));
+    }
+
+    std::vector<ThreadMarketDataSource<AnySource>*> ptrs;
+    ptrs.reserve(sources.size());
+    for (auto& s : sources) ptrs.push_back(s.get());
+
+    std::cerr << "merging " << sources.size() << " source(s)...\n";
+
+    LoserTreeMerger merger(std::move(ptrs));
+    return runBacktest(merger);
+  } catch (const std::exception& ex) {
+    std::cerr << "back-tester: " << ex.what() << std::endl;
+    return 1;
+  }
 }
