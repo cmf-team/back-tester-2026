@@ -68,9 +68,10 @@ AnySource openSource(const std::filesystem::path& path) {
   throw std::runtime_error("not a file or directory: " + path.string());
 }
 
-// 1024-slot ring per source. A producer thread parks on backpressure, so this
+// 1M-slot ring per source. A producer thread parks on backpressure, so this
 // is the working-set window between the parser and the merge/stats/lob loop.
-constexpr std::size_t kThreadSourceBuffer = 1024^2;
+// (`^` in C++ is bitwise XOR, not exponent — use `*` for "1024 squared".)
+constexpr std::size_t kThreadSourceBuffer = 1024 * 1024;
 
 } // namespace
 
