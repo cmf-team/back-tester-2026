@@ -21,6 +21,8 @@ template <typename Derived, typename T>
 class QueueBase
 {
   public:
+    using value_type = T;
+
     QueueBase() = default;
     QueueBase(const QueueBase&) = delete;
     QueueBase& operator=(const QueueBase&) = delete;

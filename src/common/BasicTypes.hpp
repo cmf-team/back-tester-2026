@@ -22,6 +22,7 @@ using SecurityId =
 
 using Quantity = double;
 using Price = double;
+using ScaledPrice = int64_t;
 
 enum class Side : signed short
 {

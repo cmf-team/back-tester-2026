@@ -9,7 +9,7 @@ namespace cmf
 // Prices are fixed-precision int64: 1 unit = 1e-9
 // e.g. 5411750000000 → 5411.75 in decimal
 // UNDEF_PRICE (INT64_MAX) denotes a null/undefined price
-constexpr int64_t UNDEF_PRICE = std::numeric_limits<int64_t>::max();
+constexpr ScaledPrice UNDEF_PRICE = std::numeric_limits<int64_t>::max();
 
 enum class Action : char
 {
@@ -86,22 +86,29 @@ constexpr bool has_flag(Flags field, Flags bit) noexcept
 // ---------------------------------------------------------------------------
 struct MarketDataEvent
 {
+    // 8-byte fields
     NanoTime ts_recv = 0;
     NanoTime ts_event = 0;
     uint64_t order_id = 0;
-    int64_t price =
+    ScaledPrice price =
         UNDEF_PRICE; // fixed-precision: 1 unit = 1e-9; INT64_MAX = undefined
+
+    // 4-byte fields
     uint32_t instrument_id = 0;
     uint32_t publisher_id = 0;
     uint32_t sequence = 0;
     uint32_t size = 0;
     int32_t ts_in_delta =
         0; // nanoseconds between ts_recv and publisher send time
+
+    // 2-byte fields packed together to eliminate interior padding
     uint16_t channel_id = 0;
+    Side side = Side::None;
+
+    // 1-byte fields
     RType rtype = RType::Mbp0;
     Flags flags = Flags::None;
     Action action = Action::None;
-    Side side = Side::None;
 
     auto operator<=>(const MarketDataEvent& other) const noexcept
     {
@@ -117,6 +124,22 @@ struct MarketDataEvent
     {
         return price != UNDEF_PRICE;
     }
+};
+
+struct CompactMarketDataEvent
+{
+    // 8-byte fields
+    NanoTime ts_event = 0;
+    uint64_t order_id = 0;
+    uint32_t instrument_id = 0;
+    ScaledPrice price =
+        UNDEF_PRICE; // fixed-precision: 1 unit = 1e-9; INT64_MAX = undefined
+
+    // 2-byte fields packed together to eliminate interior padding
+    Side side = Side::None;
+
+    // 1-byte fields
+    Action action = Action::None;
 };
 
 } // namespace cmf

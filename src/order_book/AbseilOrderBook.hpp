@@ -14,11 +14,11 @@ class AbseilOrderBook : public OrderBook<AbseilOrderBook>
 {
     friend class OrderBook<AbseilOrderBook>;
 
-    using BidMap = absl::btree_map<int64_t, int64_t, std::greater<int64_t>>;
-    using AskMap = absl::btree_map<int64_t, int64_t>;
-    using LevelPair = std::pair<int64_t, int64_t>;
+    using BidMap = absl::btree_map<ScaledPrice, ScaledPrice, std::greater<ScaledPrice>>;
+    using AskMap = absl::btree_map<ScaledPrice, ScaledPrice>;
+    using LevelPair = std::pair<ScaledPrice, ScaledPrice>;
     using OrderRecord =
-        std::tuple<Side, int64_t, uint32_t>; // (side, price, size)
+        std::tuple<Side, ScaledPrice, uint32_t>; // (side, price, size)
 
     BidMap bids_;
     AskMap asks_;
@@ -31,18 +31,18 @@ class AbseilOrderBook : public OrderBook<AbseilOrderBook>
   protected:
     void apply_impl(const MarketDataEvent& event);
 
-    [[nodiscard]] std::optional<int64_t>
+    [[nodiscard]] std::optional<ScaledPrice>
     best_price_impl(Side side) const noexcept;
 
     [[nodiscard]] uint64_t volume_at_impl(Side side,
-                                          int64_t price) const noexcept;
+                                          ScaledPrice price) const noexcept;
 
     [[nodiscard]] bool empty_impl(Side side) const noexcept;
 
     [[nodiscard]] std::span<const LevelPair> side_levels_impl(Side side) const;
 
   private:
-    void add_to_level(Side side, int64_t price, int64_t delta);
-    void remove_from_level(Side side, int64_t price, int64_t delta);
+    void add_to_level(Side side, ScaledPrice price, ScaledPrice delta);
+    void remove_from_level(Side side, ScaledPrice price, ScaledPrice delta);
 };
 } // namespace cmf

@@ -18,12 +18,12 @@ class OrderBook
         static_cast<Derived*>(this)->apply_impl(event);
     }
 
-    [[nodiscard]] std::optional<int64_t> best_price(Side side) const noexcept
+    [[nodiscard]] std::optional<ScaledPrice> best_price(Side side) const noexcept
     {
         return static_cast<const Derived*>(this)->best_price_impl(side);
     }
 
-    [[nodiscard]] uint64_t volume_at(Side side, int64_t price) const noexcept
+    [[nodiscard]] uint64_t volume_at(Side side, ScaledPrice price) const noexcept
     {
         return static_cast<const Derived*>(this)->volume_at_impl(side, price);
     }
@@ -71,8 +71,8 @@ void OrderBook<Derived>::print_snapshot(std::ostream& out,
             continue;
         }
 
-        std::vector<std::pair<int64_t, uint64_t>> level_list(levels.begin(),
-                                                             levels.end());
+        std::vector<std::pair<ScaledPrice, uint64_t>> level_list(levels.begin(),
+                                                                 levels.end());
         size_t levels_per_group =
             (level_list.size() + group_by_levels - 1) / group_by_levels;
 
@@ -82,8 +82,8 @@ void OrderBook<Derived>::print_snapshot(std::ostream& out,
             size_t start = g * levels_per_group;
             size_t end = std::min((g + 1) * levels_per_group, level_list.size());
 
-            int64_t min_price = level_list[start].first;
-            int64_t max_price = level_list[end - 1].first;
+            ScaledPrice min_price = level_list[start].first;
+            ScaledPrice max_price = level_list[end - 1].first;
             uint64_t total_qty = 0;
 
             for (size_t i = start; i < end; ++i)

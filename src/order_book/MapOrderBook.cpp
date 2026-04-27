@@ -3,13 +3,13 @@
 namespace cmf
 {
 
-void MapOrderBook::add_to_level(Side side, int64_t price, int64_t delta)
+void MapOrderBook::add_to_level(Side side, ScaledPrice price, ScaledPrice delta)
 {
     auto& level = side == Side::Buy ? bids_[price] : asks_[price];
     level += delta;
 }
 
-void MapOrderBook::remove_from_level(Side side, int64_t price, int64_t delta)
+void MapOrderBook::remove_from_level(Side side, ScaledPrice price, ScaledPrice delta)
 {
     if (side == Side::Buy)
     {
@@ -78,7 +78,7 @@ void MapOrderBook::apply_impl(const MarketDataEvent& e)
         auto& [old_side, old_price, old_size] = it->second;
         remove_from_level(old_side, old_price, static_cast<int64_t>(old_size));
         Side new_side = (e.side != Side::None) ? e.side : old_side;
-        int64_t new_price = e.is_price_defined() ? e.price : old_price;
+        ScaledPrice new_price = e.is_price_defined() ? e.price : old_price;
         add_to_level(new_side, new_price, static_cast<int64_t>(e.size));
         it->second = {new_side, new_price, e.size};
         break;
@@ -96,7 +96,7 @@ void MapOrderBook::apply_impl(const MarketDataEvent& e)
     }
 }
 
-std::optional<int64_t> MapOrderBook::best_price_impl(Side side) const noexcept
+std::optional<ScaledPrice> MapOrderBook::best_price_impl(Side side) const noexcept
 {
     if (side == Side::Buy)
         return bids_.empty() ? std::nullopt : std::optional{bids_.begin()->first};
@@ -105,7 +105,7 @@ std::optional<int64_t> MapOrderBook::best_price_impl(Side side) const noexcept
     return std::nullopt;
 }
 
-uint64_t MapOrderBook::volume_at_impl(Side side, int64_t price) const noexcept
+uint64_t MapOrderBook::volume_at_impl(Side side, ScaledPrice price) const noexcept
 {
     if (side == Side::Buy)
     {
