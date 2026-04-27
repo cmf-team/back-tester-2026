@@ -17,7 +17,7 @@ class TempFile
 
   public:
     template <class File>
-    TempFile(const File &filename)
+    TempFile(const File& filename)
         : filename_{filename},
           path_{std::filesystem::temp_directory_path() / filename}
     {
