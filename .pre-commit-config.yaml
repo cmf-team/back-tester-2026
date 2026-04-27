@@ -20,4 +20,5 @@ repos:
     hooks:
       # Format C++ code according to our style guide.
       - id: clang-format
-exclude: 'thirdparty/.*|data/.*'
+        types: [c++]
+        exclude: 'thirdparty/.*|data/.*'
