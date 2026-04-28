@@ -1,5 +1,6 @@
 #include "PresentToUser.hpp"
 #include "../common/MarketDataParser.hpp"
+#include <iomanip>
 
 void PresentToUser(std::ostream& out, std::istream& file)
 {

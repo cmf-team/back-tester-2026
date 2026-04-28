@@ -1,8 +1,10 @@
 #include "MarketDataParser.hpp"
 
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <ctime>
+#include <iomanip>
 #include <nlohmann/json.hpp>
 #include <sstream>
 #include <string>
@@ -44,17 +46,24 @@ auto nanosToIso(std::uint64_t ns) -> std::string
     if (ns == MarketDataEvent::UNDEF_TIMESTAMP)
         return "";
 
-    auto whole_s = static_cast<std::time_t>(ns / 1'000'000'000ULL);
+    auto whole_s = static_cast<time_t>(ns / 1'000'000'000ULL);
     auto frac_ns = static_cast<unsigned>(ns % 1'000'000'000ULL);
 
-    std::tm tm{};
-    gmtime_r(&whole_s, &tm);
+    struct tm* tmp = gmtime(&whole_s);
+    if (!tmp)
+        return "";
 
-    // "YYYY-MM-DDThh:mm:ss" (19 chars) + ".nnnnnnnnnZ" (11 chars) + '\0'
     char buf[32];
-    std::strftime(buf, 21, "%Y-%m-%dT%H:%M:%S", &tm);
-    std::snprintf(buf + 19, 12, ".%09uZ", frac_ns);
-    return buf;
+    strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", tmp);
+    std::string result{buf};
+    result += '.';
+
+    std::ostringstream oss;
+    oss << std::setfill('0') << std::setw(9) << frac_ns;
+    result += oss.str();
+    result += 'Z';
+
+    return result;
 }
 
 static auto priceFromString(const std::string& s) -> std::int64_t
