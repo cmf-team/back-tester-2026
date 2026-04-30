@@ -4,16 +4,10 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
-#include <iostream>
 #include <memory>
 #include <queue>
 #include <thread>
 #include <vector>
-
-void ProcessMarketDataEvent(const MarketDataEvent& event)
-{
-    std::cout << event << "\n";
-}
 
 auto ListNDJSONFiles(const std::string& folder_path) -> std::vector<std::string>
 {
@@ -44,6 +38,7 @@ namespace
 {
 
 using queue_t = ThreadSafeQueue<MarketDataEvent>;
+constexpr std::size_t BATCH_SIZE = 1024;
 
 static void ProducerThread(const std::string& file_path, queue_t& queue)
 {
@@ -54,15 +49,29 @@ static void ProducerThread(const std::string& file_path, queue_t& queue)
         return;
     }
 
+    std::vector<MarketDataEvent> batch;
+    batch.reserve(BATCH_SIZE);
+
     std::string line;
     while (std::getline(file, line))
     {
         auto event = parseNDJSON(line);
         if (event)
         {
-            queue.Push(std::move(*event));
+            batch.push_back(std::move(*event));
+            if (batch.size() >= BATCH_SIZE)
+            {
+                queue.PushBatch(batch);
+                batch.clear();
+            }
         }
     }
+
+    if (!batch.empty())
+    {
+        queue.PushBatch(batch);
+    }
+
     queue.MarkDone();
 }
 
@@ -109,24 +118,35 @@ void FlatMergerEngine::Ingest(
     threads.emplace_back([&producer_queues, &merged_queue]()
                          {
         std::priority_queue<HeapItem, std::vector<HeapItem>, std::greater<HeapItem>> heap;
+        std::vector<std::optional<MarketDataEvent>> pending(producer_queues.size());
 
-        // Initialize: take first event from each producer queue
+        // Initialize: pop first event from each queue
         for (std::size_t i = 0; i < producer_queues.size(); ++i)
         {
-            auto event = producer_queues[i]->BlockingPop();
-            if (event)
+            pending[i] = producer_queues[i]->BlockingPop();
+            if (pending[i])
             {
-                heap.push(HeapItem{event->ts_event, std::move(*event), i});
+                heap.push(HeapItem{pending[i]->ts_event, std::move(*pending[i]), i});
+                pending[i].reset();
             }
         }
 
-        // Drain the heap: repeatedly pop minimum and fetch next from that queue
+        std::vector<MarketDataEvent> merged_batch;
+        merged_batch.reserve(BATCH_SIZE);
+
         while (!heap.empty())
         {
             auto [ts, event, idx] = heap.top();
             heap.pop();
-            merged_queue->Push(std::move(event));
+            merged_batch.push_back(std::move(event));
 
+            if (merged_batch.size() >= BATCH_SIZE)
+            {
+                merged_queue->PushBatch(merged_batch);
+                merged_batch.clear();
+            }
+
+            // Get next from same queue
             auto next = producer_queues[idx]->BlockingPop();
             if (next)
             {
@@ -134,14 +154,23 @@ void FlatMergerEngine::Ingest(
             }
         }
 
+        if (!merged_batch.empty())
+        {
+            merged_queue->PushBatch(merged_batch);
+        }
+
         merged_queue->MarkDone(); });
 
     // Start dispatcher thread (lambda captures merged_queue and on_event)
     threads.emplace_back([&merged_queue, on_event]()
                          {
-        while (auto event = merged_queue->BlockingPop())
+        std::vector<MarketDataEvent> batch;
+        while (merged_queue->PopBatch(batch, BATCH_SIZE) > 0)
         {
-            on_event(*event);
+            for (const auto& event : batch)
+            {
+                on_event(event);
+            }
         } });
 
     // jthread destructors will join all threads in reverse order
@@ -242,9 +271,13 @@ void HierarchyMergerEngine::Ingest(
     // Start dispatcher thread (lambda captures root_idx, queues, and on_event)
     threads.emplace_back([&queues, root_idx, on_event]()
                          {
-        while (auto event = queues[root_idx]->BlockingPop())
+        std::vector<MarketDataEvent> batch;
+        while (queues[root_idx]->PopBatch(batch, BATCH_SIZE) > 0)
         {
-            on_event(*event);
+            for (const auto& event : batch)
+            {
+                on_event(event);
+            }
         } });
 
     // jthread destructors will join all threads in reverse order

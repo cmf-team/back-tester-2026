@@ -1,6 +1,7 @@
 #include "PresentToUser.hpp"
 #include "../common/MarketDataParser.hpp"
 #include <iomanip>
+#include <iostream>
 
 void PresentToUser(std::ostream& out, std::istream& file)
 {
@@ -48,4 +49,9 @@ void PresentToUser(std::ostream& out, std::istream& file)
         << "  Total Messages:   " << summary.total_events << "\n"
         << "  Processing Time:  " << summary.processing_time_ns << " ns\n"
         << "  Processing Time:  " << std::setprecision(3) << summary.processing_time_ns / 1'000'000 << " ms\n";
+}
+
+void ProcessMarketDataEvent(const MarketDataEvent& event)
+{
+    std::cout << event << "\n";
 }

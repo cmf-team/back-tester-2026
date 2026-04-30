@@ -48,15 +48,31 @@ int main(int argc, const char* argv[])
             return 1;
         }
         FlatMergerEngine engine;
-
+        std::vector<MarketDataEvent> events;
         const auto t0 = std::chrono::steady_clock::now();
-        engine.Ingest(files, ProcessMarketDataEvent);
+        // engine.Ingest(files, ProcessMarketDataEvent);
+        engine.Ingest(files, [&](const MarketDataEvent& e)
+                      { events.push_back(e); });
         auto processing_time_ns = static_cast<std::uint64_t>(
             std::chrono::duration_cast<std::chrono::nanoseconds>(
                 std::chrono::steady_clock::now() - t0)
                 .count());
         std::cout << "\nProcessed " << files.size() << " files in " << processing_time_ns << " ns ("
                   << std::setprecision(3) << processing_time_ns / 1'000'000 << " ms)\n";
+        std::cout << "Total events processed: " << events.size() << "\n";
+        // Print first and last 10 events as a sample
+        for (size_t i = 0; i < std::min(events.size(), static_cast<size_t>(10)); ++i)
+        {
+            std::cout << events[i] << "\n";
+        }
+        if (events.size() > 20)
+        {
+            std::cout << "...\n";
+            for (size_t i = events.size() - 10; i < events.size(); ++i)
+            {
+                std::cout << events[i] << "\n";
+            }
+        }
     }
     else
     {

@@ -17,3 +17,5 @@ struct ParseSummary
 };
 
 void PresentToUser(std::ostream& out, std::istream& file);
+
+void ProcessMarketDataEvent(const MarketDataEvent& event);
