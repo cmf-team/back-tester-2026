@@ -4,6 +4,7 @@ build
 log
 .claude
 CLAUDE.md
+tmp/
 
 
 ### C++ ###

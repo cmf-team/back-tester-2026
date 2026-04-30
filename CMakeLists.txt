@@ -15,3 +15,8 @@ if(BUILD_TESTS)
     enable_testing()
     add_subdirectory(test)
 endif()
+
+option(BUILD_BENCHMARKS "Build Google Benchmark targets" OFF)
+if(BUILD_BENCHMARKS)
+    add_subdirectory(bench)
+endif()

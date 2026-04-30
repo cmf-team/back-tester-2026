@@ -39,3 +39,49 @@ target_link_libraries(${TGT} PUBLIC INTERFACE
     $<$<CONFIG:Release>:-lCatch2Main -lCatch2>
 )
 
+# ---------------------------------------------------------------------------------------
+# nlohmann json - JSON library
+ExternalProject_Add(
+    nlohmann_json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG v3.11.2
+    GIT_SHALLOW TRUE
+    GIT_PROGRESS TRUE
+    SOURCE_DIR "${CMAKE_SOURCE_DIR}/3rdparty/nlohmann_json"
+    CMAKE_ARGS ${FORWARDED_CMAKE_ARGS}
+    # Skip build/install for header-only library
+    CONFIGURE_COMMAND ""
+    BUILD_COMMAND ""
+    INSTALL_COMMAND ""
+    UPDATE_COMMAND ""
+)
+
+set(TGT nlohmann_json-static-lib)
+add_library(${TGT} INTERFACE)
+add_dependencies(${TGT} nlohmann_json)
+target_include_directories(${TGT} SYSTEM PUBLIC INTERFACE ${CMAKE_BINARY_DIR}/include)
+
+# ---------------------------------------------------------------------------------------
+# Google Benchmark - microbenchmarking library
+ExternalProject_Add(
+    googlebenchmark
+    GIT_REPOSITORY https://github.com/google/benchmark.git
+    GIT_TAG v1.9.1
+    GIT_SHALLOW TRUE
+    GIT_PROGRESS TRUE
+    SOURCE_DIR "${CMAKE_SOURCE_DIR}/3rdparty/googlebenchmark"
+    BINARY_DIR "${CMAKE_BINARY_DIR}/3rdparty/googlebenchmark"
+    CMAKE_ARGS ${FORWARDED_CMAKE_ARGS}
+              -DBENCHMARK_ENABLE_TESTING=OFF
+              -DBENCHMARK_ENABLE_GTEST_TESTS=OFF
+    BUILD_COMMAND $(MAKE)
+    INSTALL_COMMAND $(MAKE) -s DESTDIR=${DESTDIR} install
+)
+
+set(TGT benchmark-static-lib)
+add_library(${TGT} INTERFACE)
+add_dependencies(${TGT} googlebenchmark)
+target_include_directories(${TGT} SYSTEM PUBLIC INTERFACE ${CMAKE_BINARY_DIR}/include)
+target_link_directories(${TGT} PUBLIC INTERFACE ${CMAKE_BINARY_DIR}/lib ${CMAKE_BINARY_DIR}/lib64)
+target_link_libraries(${TGT} PUBLIC INTERFACE -lbenchmark -lbenchmark_main -lpthread)
+
