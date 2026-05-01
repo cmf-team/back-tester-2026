@@ -1,0 +1,60 @@
+# Build directories
+build/
+build-*/
+cmake-build-*/
+out/
+
+# CMake cache & generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
+
+# Compiled binaries
+*.o
+*.a
+*.so
+*.dylib
+*.exe
+bin/
+
+# FetchContent downloads (simdjson, Catch2)
+_deps/
+
+# Data files — never commit raw market data
+data/
+*.json
+*.feather
+*.parquet
+*.csv
+*.zst
+*.gz
+*.zip
+*.tar
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Sanitizer / profiling output
+*.profraw
+*.profdata
+vgcore.*
+callgrind.out.*
+perf.data
