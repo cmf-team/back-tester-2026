@@ -1,15 +1,16 @@
 #pragma once
+#include "MarketDataEvent.hpp"
+#include "Order.hpp"
 #include <cstdint>
 #include <functional>
 #include <iostream>
 #include <map>
 #include <optional>
 #include <unordered_map>
-#include "Order.hpp"
-#include "MarketDataEvent.hpp"
 
-class LimitOrderBook {
-public:
+class LimitOrderBook
+{
+  public:
     void apply_event(const MarketDataEvent& ev);
     void reset();
 
@@ -21,12 +22,12 @@ public:
     std::size_t order_count() const { return orders_.size(); }
     bool empty() const { return bids_.empty() && asks_.empty(); }
 
-private:
+  private:
     std::unordered_map<uint64_t, Order> orders_;
     std::map<int64_t, int64_t, std::greater<int64_t>> bids_; // best bid at begin()
-    std::map<int64_t, int64_t>                         asks_; // best ask at begin()
+    std::map<int64_t, int64_t> asks_;                        // best ask at begin()
 
-    void add_order   (const MarketDataEvent& ev);
+    void add_order(const MarketDataEvent& ev);
     void cancel_order(const MarketDataEvent& ev);
     void modify_order(const MarketDataEvent& ev);
 

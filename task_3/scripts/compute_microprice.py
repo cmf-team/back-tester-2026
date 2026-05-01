@@ -7,7 +7,6 @@ from LOB snapshots.
 import numpy as np
 import pandas as pd
 import sys
-from pathlib import Path
 
 # ── Parameters ──────────────────────────────────────────────────────────────
 N_IMBALANCE = 10
@@ -147,12 +146,14 @@ def main():
             x = state_index(i, s)
             imbalance_center = (i + 0.5) / N_IMBALANCE
 
-            rows.append({
-                "imbalance_bucket": i,
-                "spread_bucket": s,
-                "imbalance_center": imbalance_center,
-                "G_star": G_star[x],
-            })
+            rows.append(
+                {
+                    "imbalance_bucket": i,
+                    "spread_bucket": s,
+                    "imbalance_center": imbalance_center,
+                    "G_star": G_star[x],
+                }
+            )
 
     out_df = pd.DataFrame(rows)
     out_df.to_csv(out_path, index=False)

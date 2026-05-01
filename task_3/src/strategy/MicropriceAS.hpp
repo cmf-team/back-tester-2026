@@ -18,12 +18,14 @@
 // Это делает котировки более точными — мы лучше оцениваем
 // направление рынка и сдвигаем спред соответственно.
 
-inline double compute_microprice(const BookSnapshot& snap) {
+inline double compute_microprice(const BookSnapshot& snap)
+{
     double bid_v = snap.bids.empty() ? 0.0 : snap.bids[0].amount;
     double ask_v = snap.asks.empty() ? 0.0 : snap.asks[0].amount;
     double total = bid_v + ask_v;
 
-    if (total <= 0) return snap.mid();
+    if (total <= 0)
+        return snap.mid();
 
     double bid_p = snap.best_bid();
     double ask_p = snap.best_ask();
@@ -34,19 +36,22 @@ inline double compute_microprice(const BookSnapshot& snap) {
 
 // Расширенная версия microprice с несколькими уровнями стакана
 // Взвешивает по всем доступным уровням
-inline double compute_microprice_deep(const BookSnapshot& snap, int levels = 5) {
+inline double compute_microprice_deep(const BookSnapshot& snap, int levels = 5)
+{
     double bid_total = 0.0, ask_total = 0.0;
-    double bid_vwap  = 0.0, ask_vwap  = 0.0;
+    double bid_vwap = 0.0, ask_vwap = 0.0;
 
     int n = std::min(levels, (int)std::min(snap.bids.size(), snap.asks.size()));
-    for (int i = 0; i < n; ++i) {
+    for (int i = 0; i < n; ++i)
+    {
         bid_total += snap.bids[i].amount;
         ask_total += snap.asks[i].amount;
-        bid_vwap  += snap.bids[i].price * snap.bids[i].amount;
-        ask_vwap  += snap.asks[i].price * snap.asks[i].amount;
+        bid_vwap += snap.bids[i].price * snap.bids[i].amount;
+        ask_vwap += snap.asks[i].price * snap.asks[i].amount;
     }
 
-    if (bid_total <= 0 || ask_total <= 0) return snap.mid();
+    if (bid_total <= 0 || ask_total <= 0)
+        return snap.mid();
 
     bid_vwap /= bid_total;
     ask_vwap /= ask_total;
@@ -56,29 +61,34 @@ inline double compute_microprice_deep(const BookSnapshot& snap, int levels = 5) 
 }
 
 // ── MicropriceAS стратегия ─────────────────────────────────────────────────
-class MicropriceAS : public IStrategy {
-public:
+class MicropriceAS : public IStrategy
+{
+  public:
     explicit MicropriceAS(ASConfig cfg = {}) : cfg_(cfg) {}
 
     void on_book(const BookSnapshot& snap,
                  OrderManager& om,
-                 Metrics& metrics) override {
+                 Metrics& metrics) override
+    {
 
         // Используем microprice вместо mid
         double mp = compute_microprice_deep(snap, 5);
-        double s  = snap.mid();
-        if (mp <= 0 || s <= 0) return;
+        double s = snap.mid();
+        if (mp <= 0 || s <= 0)
+            return;
 
         update_vol(mp);
-        if (sigma_ <= 0) return;
+        if (sigma_ <= 0)
+            return;
 
-        if (t_start_ == 0) t_start_ = snap.timestamp;
-        double elapsed     = (snap.timestamp - t_start_) / 1e9;
+        if (t_start_ == 0)
+            t_start_ = snap.timestamp;
+        double elapsed = (snap.timestamp - t_start_) / 1e9;
         double t_remaining = std::max(cfg_.T - elapsed, 1.0);
 
         double q = metrics.inventory;
         double q_clamped = std::max(-cfg_.q_max,
-                           std::min( cfg_.q_max, q));
+                                    std::min(cfg_.q_max, q));
 
         double sigma_p = sigma_ * mp;
         sigma_p = std::min(sigma_p, mp * 0.005);
@@ -88,8 +98,7 @@ public:
         double r = mp - q_clamped * cfg_.gamma * sigma_p * sigma_p * t_remaining;
 
         // Спред
-        double delta = cfg_.gamma * sigma_p * sigma_p * t_remaining
-                     + (2.0 / cfg_.gamma) * std::log(1.0 + cfg_.gamma / cfg_.kappa);
+        double delta = cfg_.gamma * sigma_p * sigma_p * t_remaining + (2.0 / cfg_.gamma) * std::log(1.0 + cfg_.gamma / cfg_.kappa);
 
         delta = std::max(delta, snap.spread());
         delta = std::min(delta, mp * 0.001);
@@ -99,10 +108,13 @@ public:
 
         // Inventory skew
         double inv_ratio = q_clamped / cfg_.q_max;
-        if (inv_ratio > 0.5) {
+        if (inv_ratio > 0.5)
+        {
             ask_price -= delta * 0.3 * inv_ratio;
             bid_price -= delta * 0.5 * inv_ratio;
-        } else if (inv_ratio < -0.5) {
+        }
+        else if (inv_ratio < -0.5)
+        {
             bid_price += delta * 0.3 * std::abs(inv_ratio);
             ask_price += delta * 0.5 * std::abs(inv_ratio);
         }
@@ -117,19 +129,22 @@ public:
         om.place(bid_price, ask_price, cfg_.order_size);
 
         last_mid_ = s;
-        last_mp_  = mp;
+        last_mp_ = mp;
     }
 
     void on_trade(const Trade& trade,
                   OrderManager& om,
-                  Metrics& metrics) override {
-        if (om.check_bid_fill(trade.price, trade.is_sell)) {
+                  Metrics& metrics) override
+    {
+        if (om.check_bid_fill(trade.price, trade.is_sell))
+        {
             Fill f{trade.timestamp, true,
                    om.bid_order->price, om.bid_order->amount};
             metrics.on_fill(f, last_mid_);
             om.fill_bid();
         }
-        if (om.check_ask_fill(trade.price, trade.is_sell)) {
+        if (om.check_ask_fill(trade.price, trade.is_sell))
+        {
             Fill f{trade.timestamp, false,
                    om.ask_order->price, om.ask_order->amount};
             metrics.on_fill(f, last_mid_);
@@ -137,39 +152,44 @@ public:
         }
     }
 
-    const char* name() const override {
+    const char* name() const override
+    {
         return "Microprice + Avellaneda-Stoikov (2018)";
     }
 
     double last_microprice() const { return last_mp_; }
-    double sigma()           const { return sigma_;   }
+    double sigma() const { return sigma_; }
 
-private:
-    void update_vol(double mp) {
+  private:
+    void update_vol(double mp)
+    {
         mp_history_.push_back(mp);
         if ((int)mp_history_.size() > cfg_.vol_window)
             mp_history_.pop_front();
-        if ((int)mp_history_.size() < 2) return;
+        if ((int)mp_history_.size() < 2)
+            return;
 
         std::vector<double> returns;
         for (size_t i = 1; i < mp_history_.size(); ++i)
-            returns.push_back(std::log(mp_history_[i] / mp_history_[i-1]));
+            returns.push_back(std::log(mp_history_[i] / mp_history_[i - 1]));
 
         double mean = 0.0;
-        for (double r : returns) mean += r;
+        for (double r : returns)
+            mean += r;
         mean /= returns.size();
 
         double var = 0.0;
-        for (double r : returns) var += (r - mean) * (r - mean);
+        for (double r : returns)
+            var += (r - mean) * (r - mean);
         var /= returns.size();
 
         sigma_ = std::sqrt(var);
     }
 
-    ASConfig           cfg_;
+    ASConfig cfg_;
     std::deque<double> mp_history_;
-    double             sigma_   = 0.0;
-    double             last_mid_= 0.0;
-    double             last_mp_ = 0.0;
-    uint64_t           t_start_ = 0;
+    double sigma_ = 0.0;
+    double last_mid_ = 0.0;
+    double last_mp_ = 0.0;
+    uint64_t t_start_ = 0;
 };

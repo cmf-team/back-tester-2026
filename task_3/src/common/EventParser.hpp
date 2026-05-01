@@ -1,7 +1,7 @@
 #pragma once
+#include "MarketDataEvent.hpp"
 #include <string>
 #include <vector>
-#include "MarketDataEvent.hpp"
 
 // Parse a Databento NDJSON MBO file into a vector of MarketDataEvents.
 // Uses simdjson on_demand API for maximum throughput (~2 GB/s).

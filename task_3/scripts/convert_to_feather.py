@@ -20,17 +20,19 @@ try:
 except ImportError:
     sys.exit("pyarrow not installed. Run: pip install pyarrow")
 
-SCHEMA = pa.schema([
-    pa.field("ts_recv", pa.uint64()),
-    pa.field("ts_event", pa.uint64()),
-    pa.field("action", pa.string()),
-    pa.field("side", pa.string()),
-    pa.field("order_id", pa.uint64()),
-    pa.field("instrument_id", pa.uint64()),
-    pa.field("price", pa.int64()),   # scaled 1e-9
-    pa.field("size", pa.int64()),
-    pa.field("flags", pa.uint8()),
-])
+SCHEMA = pa.schema(
+    [
+        pa.field("ts_recv", pa.uint64()),
+        pa.field("ts_event", pa.uint64()),
+        pa.field("action", pa.string()),
+        pa.field("side", pa.string()),
+        pa.field("order_id", pa.uint64()),
+        pa.field("instrument_id", pa.uint64()),
+        pa.field("price", pa.int64()),  # scaled 1e-9
+        pa.field("size", pa.int64()),
+        pa.field("flags", pa.uint8()),
+    ]
+)
 
 UNDEF_PRICE = 9_223_372_036_854_775_807
 UNDEF_TS = 18_446_744_073_709_551_615
@@ -122,7 +124,7 @@ def convert_file(json_path: Path, output_dir: Path) -> Path:
     print(
         f"  {json_path.name}: {n:,} records | "
         f"JSON {json_mb:.1f} MB → Feather {feather_mb:.1f} MB "
-        f"({feather_mb/json_mb*100:.0f}%) | {elapsed:.2f}s"
+        f"({feather_mb / json_mb * 100:.0f}%) | {elapsed:.2f}s"
     )
 
     return out_path
@@ -147,7 +149,7 @@ def benchmark(json_path: Path, feather_path: Path):
 
     print(
         f"  JSON    : {n_json:>10,} records  {json_sec:6.3f}s  "
-        f"{n_json/json_sec:>12,.0f} rec/s"
+        f"{n_json / json_sec:>12,.0f} rec/s"
     )
 
     t0 = time.perf_counter()
@@ -157,8 +159,8 @@ def benchmark(json_path: Path, feather_path: Path):
 
     print(
         f"  Feather : {n_f:>10,} records  {feat_sec:6.3f}s  "
-        f"{n_f/feat_sec:>12,.0f} rec/s  "
-        f"  ↑ {json_sec/feat_sec:.1f}x faster"
+        f"{n_f / feat_sec:>12,.0f} rec/s  "
+        f"  ↑ {json_sec / feat_sec:.1f}x faster"
     )
 
 
@@ -173,7 +175,8 @@ def main():
 
     if inp.is_dir():
         files = [
-            f for f in inp.rglob("*.json")
+            f
+            for f in inp.rglob("*.json")
             if f.name not in ("metadata.json", "manifest.json", "condition.json")
         ]
         files.sort()
