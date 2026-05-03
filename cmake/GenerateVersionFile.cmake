@@ -79,8 +79,14 @@ GetComponentVersions(COMPONENT_DIR_LIST VERSION_INFO)
 configure_file(${CMAKE_SOURCE_DIR}/src/Version.hpp.in ${CMAKE_BINARY_DIR}/include/Version.hpp)
 
 # regenerate Version.hpp on the build step
+# Зависимости только от файлов / реальных таргетов; имена каталогов из 3rdparty не являются cmake-таргетами.
+set(_VERSION_GEN_DEPS ${CMAKE_SOURCE_DIR}/src/Version.hpp.in)
+if(BUILD_TESTS AND TARGET Catch2)
+    list(APPEND _VERSION_GEN_DEPS Catch2)
+endif()
+
 add_custom_target(GenerateVersion
     COMMAND ${CMAKE_COMMAND} -DDISABLE_PRINT=1 .
-    DEPENDS ${CMAKE_SOURCE_DIR}/src/Version.hpp.in ${THIRD_PARTY_COMPONENTS}
+    DEPENDS ${_VERSION_GEN_DEPS}
     COMMENT "Configuring Version.hpp"
 )
