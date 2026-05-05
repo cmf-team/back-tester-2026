@@ -2,13 +2,36 @@
 // please, keep it minimalistic
 
 #include "common/BasicTypes.hpp"
+#include "common/MarketDataEvent.hpp"
+#include "main/FileReader.hpp"
 
-#include <fstream>
-#include <iostream>
 #include <cstddef>
+#include <deque>
+#include <iostream>
 #include <string>
+#include <vector>
 
 using namespace cmf;
+
+namespace
+{
+
+void processMarketDataEvent(const MarketDataEvent &order)
+{
+    std::cout << "ts_recv=" << order.tsRecv << " order_id=" << order.orderId << " side=" << order.side
+              << " price=";
+    if (order.price.has_value())
+    {
+        std::cout << *order.price;
+    }
+    else
+    {
+        std::cout << "null";
+    }
+    std::cout << " size=" << order.size << " action=" << order.action << std::endl;
+}
+
+} // namespace
 
 int main(int argc, const char *argv[])
 {
@@ -21,27 +44,51 @@ int main(int argc, const char *argv[])
         }
 
         const std::string inputFilePath{argv[1]};
-        std::ifstream inputFile(inputFilePath);
-        if (!inputFile.is_open())
+        FileReader fileReader(inputFilePath);
+        MarketDataEvent event;
+        std::size_t totalMessagesProcessed = 0;
+        std::string firstTimestamp;
+        std::string lastTimestamp;
+        std::vector<MarketDataEvent> firstTenEvents;
+        std::deque<MarketDataEvent> lastTenEvents;
+
+        while (fileReader.readNextEvent(event))
         {
-            std::cerr << "Failed to open file: " << inputFilePath << std::endl;
-            return 1;
+            ++totalMessagesProcessed;
+
+            if (firstTimestamp.empty())
+            {
+                firstTimestamp = event.tsRecv;
+            }
+            lastTimestamp = event.tsRecv;
+
+            if (firstTenEvents.size() < 10)
+            {
+                firstTenEvents.push_back(event);
+            }
+
+            lastTenEvents.push_back(event);
+            if (lastTenEvents.size() > 10)
+            {
+                lastTenEvents.pop_front();
+            }
         }
 
-        std::string line;
-        std::size_t totalLines = 0;
-        while (std::getline(inputFile, line))
+        std::cout << "First 10 events:" << std::endl;
+        for (const auto &firstEvent : firstTenEvents)
         {
-            ++totalLines;
+            processMarketDataEvent(firstEvent);
         }
 
-        if (!inputFile.eof())
+        std::cout << "Last 10 events:" << std::endl;
+        for (const auto &lastEvent : lastTenEvents)
         {
-            std::cerr << "Error while reading file: " << inputFilePath << std::endl;
-            return 1;
+            processMarketDataEvent(lastEvent);
         }
 
-        std::cout << "Total lines: " << totalLines << std::endl;
+        std::cout << "Summary: total_messages_processed=" << totalMessagesProcessed
+                  << " first_timestamp=" << (firstTimestamp.empty() ? "n/a" : firstTimestamp)
+                  << " last_timestamp=" << (lastTimestamp.empty() ? "n/a" : lastTimestamp) << std::endl;
     }
     catch (std::exception &ex)
     {
