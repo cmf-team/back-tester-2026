@@ -4,10 +4,12 @@
 #include "common/BasicTypes.hpp"
 #include "common/MarketDataEvent.hpp"
 #include "main/FileReader.hpp"
+#include "main/MdEventConverter.hpp"
 
 #include <cstddef>
 #include <deque>
 #include <iostream>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -18,8 +20,8 @@ namespace
 
 void processMarketDataEvent(const MarketDataEvent &order)
 {
-    std::cout << "ts_recv=" << order.tsRecv << " order_id=" << order.orderId
-              << " side=" << MarketDataEvent::toChar(order.side) << " price=";
+    std::cout << "ts_recv_ns=" << std::to_string(order.tsRecv) << " order_id=" << order.orderId
+              << " side=" << MdEventConverter::toChar(order.side) << " price=";
     if (order.price.has_value())
     {
         std::cout << *order.price;
@@ -28,7 +30,7 @@ void processMarketDataEvent(const MarketDataEvent &order)
     {
         std::cout << "null";
     }
-    std::cout << " size=" << order.size << " action=" << MarketDataEvent::toChar(order.action) << std::endl;
+    std::cout << " size=" << order.size << " action=" << MdEventConverter::toChar(order.action) << std::endl;
 }
 
 } // namespace
@@ -45,22 +47,31 @@ int main(int argc, const char *argv[])
 
         const std::string inputFilePath{argv[1]};
         FileReader fileReader(inputFilePath);
+        MdEventConverter eventConverter;
         MarketDataEvent event;
+        std::string rawLine;
         std::size_t totalMessagesProcessed = 0;
-        std::string firstTimestamp;
-        std::string lastTimestamp;
+        std::int64_t earliestTimestampNs = std::numeric_limits<std::int64_t>::max();
+        std::int64_t latestTimestampNs = std::numeric_limits<std::int64_t>::min();
         std::vector<MarketDataEvent> firstTenEvents;
         std::deque<MarketDataEvent> lastTenEvents;
 
-        while (fileReader.readNextEvent(event))
+        while (fileReader.readNextRawLine(rawLine))
         {
+            if (!eventConverter.parseRaw(rawLine, event))
+            {
+                continue;
+            }
             ++totalMessagesProcessed;
 
-            if (firstTimestamp.empty())
+            if (event.tsRecv < earliestTimestampNs)
             {
-                firstTimestamp = event.tsRecv;
+                earliestTimestampNs = event.tsRecv;
             }
-            lastTimestamp = event.tsRecv;
+            if (event.tsRecv > latestTimestampNs)
+            {
+                latestTimestampNs = event.tsRecv;
+            }
 
             if (firstTenEvents.size() < 10)
             {
@@ -87,8 +98,23 @@ int main(int argc, const char *argv[])
         }
 
         std::cout << "Summary: total_messages_processed=" << totalMessagesProcessed
-                  << " first_timestamp=" << (firstTimestamp.empty() ? "n/a" : firstTimestamp)
-                  << " last_timestamp=" << (lastTimestamp.empty() ? "n/a" : lastTimestamp) << std::endl;
+                  << " first_timestamp_ns=";
+        if (totalMessagesProcessed == 0)
+        {
+            std::cout << "n/a"
+                      << " first_timestamp=n/a"
+                      << " last_timestamp_ns=n/a"
+                      << " last_timestamp=n/a";
+        }
+        else
+        {
+            std::cout << earliestTimestampNs
+                      << " first_timestamp=" << MdEventConverter::formatUnixNanosToIso8601(earliestTimestampNs)
+                      << " last_timestamp_ns=" << latestTimestampNs
+                      << " last_timestamp=" << MdEventConverter::formatUnixNanosToIso8601(latestTimestampNs);
+        }
+        std::cout
+                  << std::endl;
     }
     catch (std::exception &ex)
     {
