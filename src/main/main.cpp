@@ -18,8 +18,8 @@ namespace
 
 void processMarketDataEvent(const MarketDataEvent &order)
 {
-    std::cout << "ts_recv=" << order.tsRecv << " order_id=" << order.orderId << " side=" << order.side
-              << " price=";
+    std::cout << "ts_recv=" << order.tsRecv << " order_id=" << order.orderId
+              << " side=" << MarketDataEvent::toChar(order.side) << " price=";
     if (order.price.has_value())
     {
         std::cout << *order.price;
@@ -28,7 +28,7 @@ void processMarketDataEvent(const MarketDataEvent &order)
     {
         std::cout << "null";
     }
-    std::cout << " size=" << order.size << " action=" << order.action << std::endl;
+    std::cout << " size=" << order.size << " action=" << MarketDataEvent::toChar(order.action) << std::endl;
 }
 
 } // namespace

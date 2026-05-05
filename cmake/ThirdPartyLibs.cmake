@@ -15,6 +15,33 @@ set(FORWARDED_CMAKE_ARGS
 set(DESTDIR "")
 
 # ---------------------------------------------------------------------------------------
+# simdjson - fast JSON parser
+ExternalProject_Add(
+    simdjson
+    GIT_REPOSITORY https://github.com/simdjson/simdjson.git
+    GIT_TAG v3.12.2
+    GIT_SHALLOW TRUE
+    GIT_PROGRESS TRUE
+    SOURCE_DIR "${CMAKE_SOURCE_DIR}/3rdparty/simdjson"
+    BINARY_DIR "${CMAKE_BINARY_DIR}/3rdparty/simdjson"
+    CMAKE_ARGS
+        ${FORWARDED_CMAKE_ARGS}
+        -DSIMDJSON_BUILD_STATIC=ON
+        -DSIMDJSON_BUILD_SHARED=OFF
+        -DSIMDJSON_DEVELOPER_MODE=OFF
+        -DSIMDJSON_ENABLE_THREADS=ON
+    BUILD_COMMAND $(MAKE)
+    INSTALL_COMMAND $(MAKE) -s DESTDIR=${DESTDIR} install
+)
+
+set(TGT simdjson-static-lib)
+add_library(${TGT} INTERFACE)
+add_dependencies(${TGT} simdjson)
+target_include_directories(${TGT} SYSTEM PUBLIC INTERFACE ${CMAKE_BINARY_DIR}/include)
+target_link_directories(${TGT} PUBLIC INTERFACE ${CMAKE_BINARY_DIR}/lib ${CMAKE_BINARY_DIR}/lib64)
+target_link_libraries(${TGT} PUBLIC INTERFACE -lsimdjson)
+
+# ---------------------------------------------------------------------------------------
 # Catch2 - C++ testing framework
 ExternalProject_Add(
     Catch2
@@ -38,4 +65,3 @@ target_link_libraries(${TGT} PUBLIC INTERFACE
     $<$<CONFIG:Debug>:-lCatch2Maind -lCatch2d>
     $<$<CONFIG:Release>:-lCatch2Main -lCatch2>
 )
-
