@@ -20,6 +20,20 @@ std::int64_t daysFromCivil(int year, unsigned month, unsigned day)
     return era * 146097LL + static_cast<int>(doe) - 719468;
 }
 
+void civilFromDays(std::int64_t days, int& year, unsigned& month, unsigned& day)
+{
+    const std::int64_t z = days + 719468;
+    const std::int64_t era = (z >= 0 ? z : z - 146096) / 146097;
+    const unsigned doe = static_cast<unsigned>(z - era * 146097);
+    const unsigned yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    const int y = static_cast<int>(yoe) + static_cast<int>(era) * 400;
+    const unsigned doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    const unsigned mp = (5 * doy + 2) / 153;
+    day = doy - (153 * mp + 2) / 5 + 1;
+    month = mp < 10 ? mp + 3 : mp - 9;
+    year = y + (month <= 2 ? 1 : 0);
+}
+
 } // namespace
 
 bool MdEventConverter::parseRaw(const std::string& rawLine, MarketDataEvent& event) const
@@ -31,21 +45,21 @@ bool MdEventConverter::parseRaw(const std::string& rawLine, MarketDataEvent& eve
         simdjson::ondemand::document doc = parser.iterate(paddedLine);
 
         const auto tsRecvRaw = std::string_view(doc["ts_recv"].get_string());
-        const auto tsRecv = isoTimestampToNanos(tsRecvRaw);
-        if (!tsRecv.has_value())
+        std::int64_t tsRecv = 0;
+        if (!isoTimestampToNanos(tsRecvRaw, tsRecv))
         {
             return false;
         }
-        event.tsRecv = *tsRecv;
+        event.tsRecv = tsRecv;
 
         simdjson::ondemand::object hd = doc["hd"].get_object();
         const auto tsEventRaw = std::string_view(hd["ts_event"].get_string());
-        const auto tsEvent = isoTimestampToNanos(tsEventRaw);
-        if (!tsEvent.has_value())
+        std::int64_t tsEvent = 0;
+        if (!isoTimestampToNanos(tsEventRaw, tsEvent))
         {
             return false;
         }
-        event.hd.tsEvent = *tsEvent;
+        event.hd.tsEvent = tsEvent;
         event.hd.rtype = static_cast<std::uint16_t>(std::uint64_t(hd["rtype"].get_uint64()));
         event.hd.publisherId = static_cast<std::uint16_t>(std::uint64_t(hd["publisher_id"].get_uint64()));
         event.hd.instrumentId = static_cast<std::uint32_t>(std::uint64_t(hd["instrument_id"].get_uint64()));
@@ -173,20 +187,6 @@ char MdEventConverter::toChar(Side value)
     }
 }
 
-void MdEventConverter::civilFromDays(std::int64_t days, int& year, unsigned& month, unsigned& day)
-{
-    const std::int64_t z = days + 719468;
-    const std::int64_t era = (z >= 0 ? z : z - 146096) / 146097;
-    const unsigned doe = static_cast<unsigned>(z - era * 146097);
-    const unsigned yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-    const int y = static_cast<int>(yoe) + static_cast<int>(era) * 400;
-    const unsigned doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    const unsigned mp = (5 * doy + 2) / 153;
-    day = doy - (153 * mp + 2) / 5 + 1;
-    month = mp < 10 ? mp + 3 : mp - 9;
-    year = y + (month <= 2 ? 1 : 0);
-}
-
 void MdEventConverter::nanosToIsoTimestamp(std::int64_t unixNanos, char (&buf)[31])
 {
     const std::int64_t seconds = unixNanos / 1'000'000'000LL;
@@ -215,52 +215,54 @@ void MdEventConverter::nanosToIsoTimestamp(std::int64_t unixNanos, char (&buf)[3
                   static_cast<long long>(nanos));
 }
 
-std::optional<std::int64_t> MdEventConverter::isoTimestampToNanos(std::string_view value)
+bool MdEventConverter::isoTimestampToNanos(std::string_view value, std::int64_t &outUnixNanos)
 {
     // Hardcoded check for YYYY-MM-DDTHH:MM:SS.NNNNNNNNNZ
     if (value.size() != 30 || value[4] != '-' || value[7] != '-' || value[10] != 'T' ||
         value[13] != ':' || value[16] != ':' || value[19] != '.' || value[29] != 'Z')
     {
-        return std::nullopt;
+        return false;
     }
 
-    auto parsePart = [&](std::size_t start, std::size_t len) -> std::optional<int>
+    auto parsePart = [&](std::size_t start, std::size_t len, int &out) -> bool
     {
-        int out = 0;
+        out = 0;
         for (std::size_t i = 0; i < len; ++i)
         {
             const char c = value[start + i];
             if (!std::isdigit(static_cast<unsigned char>(c)))
             {
-                return std::nullopt;
+                return false;
             }
             out = out * 10 + (c - '0');
         }
-        return out;
+        return true;
     };
 
-    const auto year = parsePart(0, 4);
-    const auto month = parsePart(5, 2);
-    const auto day = parsePart(8, 2);
-    const auto hour = parsePart(11, 2);
-    const auto minute = parsePart(14, 2);
-    const auto second = parsePart(17, 2);
-    const auto nanos = parsePart(20, 9);
-    if (!year.has_value() || !month.has_value() || !day.has_value() || !hour.has_value() ||
-        !minute.has_value() || !second.has_value() || !nanos.has_value())
+    int year = 0;
+    int month = 0;
+    int day = 0;
+    int hour = 0;
+    int minute = 0;
+    int second = 0;
+    int nanos = 0;
+    if (!parsePart(0, 4, year) || !parsePart(5, 2, month) || !parsePart(8, 2, day) ||
+        !parsePart(11, 2, hour) || !parsePart(14, 2, minute) || !parsePart(17, 2, second) ||
+        !parsePart(20, 9, nanos))
     {
-        return std::nullopt;
+        return false;
     }
 
-    if (*month < 1 || *month > 12 || *day < 1 || *day > 31 || *hour > 23 || *minute > 59 ||
-        *second > 60)
+    if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59 ||
+        second > 60)
     {
-        return std::nullopt;
+        return false;
     }
 
-    const std::int64_t days = daysFromCivil(*year, static_cast<unsigned>(*month), static_cast<unsigned>(*day));
-    const std::int64_t seconds = days * 86400 + *hour * 3600 + *minute * 60 + *second;
-    return seconds * 1'000'000'000LL + *nanos;
+    const std::int64_t days = daysFromCivil(year, static_cast<unsigned>(month), static_cast<unsigned>(day));
+    const std::int64_t seconds = days * 86400 + hour * 3600 + minute * 60 + second;
+    outUnixNanos = seconds * 1'000'000'000LL + nanos;
+    return true;
 }
 
 std::optional<Price> MdEventConverter::parsePriceDecimalString(const std::string& raw)

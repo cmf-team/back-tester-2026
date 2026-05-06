@@ -20,11 +20,10 @@ class MdEventConverter
     static char toChar(MdAction value);
     static char toChar(Side value);
 
+    static bool isoTimestampToNanos(std::string_view value, std::int64_t &outUnixNanos);
     static void nanosToIsoTimestamp(std::int64_t unixNanos, char (&buf)[31]);
 
   private:
-    static void civilFromDays(std::int64_t days, int& year, unsigned& month, unsigned& day);
-    static std::optional<std::int64_t> isoTimestampToNanos(std::string_view value);
     static std::optional<Price> parsePriceDecimalString(const std::string &raw);
 };
 
