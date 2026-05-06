@@ -14,11 +14,4 @@ enum class MdAction : char
     None = 'N'
 };
 
-enum class MdSide : char
-{
-    Ask = 'A',
-    Bid = 'B',
-    None = 'N'
-};
-
 } // namespace cmf

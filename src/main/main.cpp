@@ -97,24 +97,23 @@ int main(int argc, const char *argv[])
             processMarketDataEvent(lastEvent);
         }
 
-        std::cout << "Summary: total_messages_processed=" << totalMessagesProcessed
-                  << " first_timestamp_ns=";
+        std::cout << "Summary: total_messages_processed=" << totalMessagesProcessed << " first_timestamp_ns=";
         if (totalMessagesProcessed == 0)
         {
-            std::cout << "n/a"
-                      << " first_timestamp=n/a"
-                      << " last_timestamp_ns=n/a"
-                      << " last_timestamp=n/a";
+            std::cout << "n/a first_timestamp=n/a last_timestamp_ns=n/a last_timestamp=n/a";
         }
         else
         {
+            char earliestIso[31];
+            char latestIso[31];
+            MdEventConverter::nanosToIsoTimestamp(earliestTimestampNs, earliestIso);
+            MdEventConverter::nanosToIsoTimestamp(latestTimestampNs, latestIso);
             std::cout << earliestTimestampNs
-                      << " first_timestamp=" << MdEventConverter::formatUnixNanosToIso8601(earliestTimestampNs)
+                      << " first_timestamp=" << earliestIso
                       << " last_timestamp_ns=" << latestTimestampNs
-                      << " last_timestamp=" << MdEventConverter::formatUnixNanosToIso8601(latestTimestampNs);
+                      << " last_timestamp=" << latestIso;
         }
-        std::cout
-                  << std::endl;
+        std::cout << std::endl;
     }
     catch (std::exception &ex)
     {

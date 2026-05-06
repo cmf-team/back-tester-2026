@@ -14,16 +14,17 @@ class MdEventConverter
     bool parseRaw(const std::string &rawLine, MarketDataEvent &event) const;
 
     static std::optional<MdAction> actionFromChar(char value);
-    static std::optional<MdSide> sideFromChar(char value);
-    static bool isValidActionSide(MdAction action, MdSide side);
+    static std::optional<Side> sideFromChar(char value);
+    static bool isValidActionSide(MdAction action, Side side);
     static char toChar(MdAction value);
-    static char toChar(MdSide value);
+    static char toChar(Side value);
 
-    static std::string formatUnixNanosToIso8601(std::int64_t unixNanos);
+    static void nanosToIsoTimestamp(std::int64_t unixNanos, char (&buf)[31]);
 
   private:
-    static std::optional<std::int64_t> parseIso8601ToUnixNanos(const std::string &value);
-    static std::optional<std::int64_t> parsePriceDecimalString(const std::string &raw);
+    static void civilFromDays(std::int64_t days, int& year, unsigned& month, unsigned& day);
+    static std::optional<std::int64_t> isoTimestampToNanos(const std::string &value);
+    static std::optional<Price> parsePriceDecimalString(const std::string &raw);
 };
 
 } // namespace cmf
