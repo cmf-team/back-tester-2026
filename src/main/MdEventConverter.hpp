@@ -4,6 +4,7 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
 
 namespace cmf
 {
@@ -23,7 +24,7 @@ class MdEventConverter
 
   private:
     static void civilFromDays(std::int64_t days, int& year, unsigned& month, unsigned& day);
-    static std::optional<std::int64_t> isoTimestampToNanos(const std::string &value);
+    static std::optional<std::int64_t> isoTimestampToNanos(std::string_view value);
     static std::optional<Price> parsePriceDecimalString(const std::string &raw);
 };
 

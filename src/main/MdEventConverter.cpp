@@ -30,7 +30,7 @@ bool MdEventConverter::parseRaw(const std::string& rawLine, MarketDataEvent& eve
         simdjson::padded_string paddedLine(rawLine);
         simdjson::ondemand::document doc = parser.iterate(paddedLine);
 
-        const auto tsRecvRaw = std::string(std::string_view(doc["ts_recv"].get_string()));
+        const auto tsRecvRaw = std::string_view(doc["ts_recv"].get_string());
         const auto tsRecv = isoTimestampToNanos(tsRecvRaw);
         if (!tsRecv.has_value())
         {
@@ -39,7 +39,7 @@ bool MdEventConverter::parseRaw(const std::string& rawLine, MarketDataEvent& eve
         event.tsRecv = *tsRecv;
 
         simdjson::ondemand::object hd = doc["hd"].get_object();
-        const auto tsEventRaw = std::string(std::string_view(hd["ts_event"].get_string()));
+        const auto tsEventRaw = std::string_view(hd["ts_event"].get_string());
         const auto tsEvent = isoTimestampToNanos(tsEventRaw);
         if (!tsEvent.has_value())
         {
@@ -215,9 +215,9 @@ void MdEventConverter::nanosToIsoTimestamp(std::int64_t unixNanos, char (&buf)[3
                   static_cast<long long>(nanos));
 }
 
-std::optional<std::int64_t> MdEventConverter::isoTimestampToNanos(const std::string& value)
+std::optional<std::int64_t> MdEventConverter::isoTimestampToNanos(std::string_view value)
 {
-    // Expected format: YYYY-MM-DDTHH:MM:SS.NNNNNNNNNZ
+    // Hardcoded check for YYYY-MM-DDTHH:MM:SS.NNNNNNNNNZ
     if (value.size() != 30 || value[4] != '-' || value[7] != '-' || value[10] != 'T' ||
         value[13] != ':' || value[16] != ':' || value[19] != '.' || value[29] != 'Z')
     {

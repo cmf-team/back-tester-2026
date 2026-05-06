@@ -22,6 +22,9 @@ target_link_libraries(${TARGET} PRIVATE
     back-tester-common
     back-tester-lib
 )
+target_compile_definitions(${TARGET} PRIVATE
+    BACK_TESTER_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
 
 # Register the tests with CTest
 catch_discover_tests(${TARGET})
