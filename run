@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BUILD_DIR="$ROOT_DIR/build"
+
+build() {
+  cmake -S "$ROOT_DIR" -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release >/dev/null
+  cmake --build "$BUILD_DIR" >/dev/null
+}
+
+usage() {
+  cat <<USAGE
+Usage:
+  ./run standard <path_to_single_ndjson_file> [--verbose] [--print-events N]
+  ./run flat <path_to_folder> [--verbose] [--print-events N]
+  ./run hierarchy <path_to_folder> [--verbose] [--print-events N]
+  ./run benchmark <path_to_folder>
+  ./run test
+
+The script builds the project first, then runs the requested mode.
+USAGE
+}
+
+if [[ $# -eq 0 ]]; then
+  usage
+  exit 1
+fi
+
+command="$1"
+shift
+
+build
+
+case "$command" in
+  standard)
+    if [[ $# -lt 1 ]]; then usage; exit 1; fi
+    "$BUILD_DIR/ingest" --mode standard --input "$1" "${@:2}"
+    ;;
+  flat)
+    if [[ $# -lt 1 ]]; then usage; exit 1; fi
+    "$BUILD_DIR/ingest" --mode flat --input "$1" "${@:2}"
+    ;;
+  hierarchy|hierarchical)
+    if [[ $# -lt 1 ]]; then usage; exit 1; fi
+    "$BUILD_DIR/ingest" --mode hierarchy --input "$1" "${@:2}"
+    ;;
+  benchmark)
+    if [[ $# -lt 1 ]]; then usage; exit 1; fi
+    "$BUILD_DIR/ingest" --benchmark "$1" "${@:2}"
+    ;;
+  test)
+    ctest --test-dir "$BUILD_DIR" --output-on-failure
+    ;;
+  help|--help|-h)
+    usage
+    ;;
+  *)
+    "$BUILD_DIR/ingest" "$command" "$@"
+    ;;
+esac
