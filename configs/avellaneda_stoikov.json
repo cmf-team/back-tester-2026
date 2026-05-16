@@ -1,0 +1,16 @@
+{
+  "mode": "standard",
+  "input": "tests/test_data/lob_standard_synthetic.ndjson",
+  "backtest": true,
+  "strategy": "avellaneda_stoikov",
+  "instrument_id": 1,
+  "order_size": 1,
+  "tick_size": 1000000000,
+  "quote_interval_events": 1,
+  "max_inventory": 10,
+  "gamma": 0.1,
+  "sigma": 1.0,
+  "k": 1.0,
+  "horizon_seconds": 1.0,
+  "cli": "./build/ingest --mode standard --input tests/test_data/lob_standard_synthetic.ndjson --backtest --strategy avellaneda_stoikov --instrument-id 1 --order-size 1 --tick-size 1000000000 --quote-interval-events 1 --max-inventory 10 --gamma 0.1 --sigma 1.0 --k 1.0 --horizon-seconds 1.0"
+}

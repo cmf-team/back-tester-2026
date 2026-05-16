@@ -13,12 +13,19 @@ option(ENABLE_ARROW "Build optional Arrow/Feather input support" OFF)
 
 set(INGEST_SOURCES
     src/app/ArgsParser.cpp
+    src/backtest/BacktestMetrics.cpp
+    src/backtest/BacktestReport.cpp
+    src/backtest/ExecutionSimulator.cpp
+    src/backtest/MarketView.cpp
+    src/backtest/OrderManager.cpp
+    src/backtest/Portfolio.cpp
     src/book/BookManager.cpp
     src/book/LimitOrderBook.cpp
     src/domain/MarketDataEvent.cpp
     src/io/MmapFile.cpp
     src/parsing/JsonParser.cpp
     src/processing/AsyncSnapshotWriter.cpp
+    src/processing/BacktestMarketDataEventProcessor.cpp
     src/processing/LoggingMarketDataEventProcessor.cpp
     src/processing/LobMarketDataEventProcessor.cpp
     src/processing/ShardedLobMarketDataEventProcessor.cpp
@@ -29,18 +36,28 @@ set(INGEST_SOURCES
     src/runners/InputFileDiscovery.cpp
     src/runners/ResultPrinter.cpp
     src/runners/StandardRunner.cpp
+    src/strategies/AvellanedaStoikovStrategy.cpp
+    src/strategies/FixedQuoteStrategy.cpp
+    src/strategies/MicropriceAvellanedaStoikovStrategy.cpp
     third_party/simdjson/simdjson.cpp
 )
 
 set(INGEST_TEST_SOURCES
     tests/test_main.cpp
     tests/app/ArgsParserTest.cpp
+    tests/backtest/BacktestReportTest.cpp
+    tests/backtest/BacktestTypesTest.cpp
+    tests/backtest/ExecutionSimulatorTest.cpp
+    tests/backtest/MarketViewTest.cpp
+    tests/backtest/OrderManagerTest.cpp
+    tests/backtest/PortfolioTest.cpp
     tests/book/BookManagerTest.cpp
     tests/book/LimitOrderBookTest.cpp
     tests/concurrency/NonBlockingQueueTest.cpp
     tests/domain/MarketDataEventTest.cpp
     tests/parsing/JsonParserTest.cpp
     tests/processing/AsyncSnapshotWriterTest.cpp
+    tests/processing/BacktestMarketDataEventProcessorTest.cpp
     tests/processing/LobMarketDataEventProcessorTest.cpp
     tests/runners/FlatMergeRunnerTest.cpp
     tests/runners/HardLobIntegrationTest.cpp
@@ -48,6 +65,10 @@ set(INGEST_TEST_SOURCES
     tests/runners/ResultPrinterTest.cpp
     tests/runners/StandardRunnerLobIntegrationTest.cpp
     tests/runners/StandardRunnerTest.cpp
+    tests/strategies/AvellanedaStoikovStrategyTest.cpp
+    tests/strategies/FixedQuoteStrategyTest.cpp
+    tests/strategies/MicropriceAvellanedaStoikovStrategyTest.cpp
+    tests/strategies/StrategyTest.cpp
 )
 
 if (ENABLE_ARROW)

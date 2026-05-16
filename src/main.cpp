@@ -1,4 +1,6 @@
 #include "app/ArgsParser.hpp"
+#include "backtest/BacktestReport.hpp"
+#include "processing/BacktestMarketDataEventProcessor.hpp"
 #include "processing/LoggingMarketDataEventProcessor.hpp"
 #include "processing/LobMarketDataEventProcessor.hpp"
 #include "processing/ShardedLobMarketDataEventProcessor.hpp"
@@ -7,11 +9,15 @@
 #include "runners/HierarchicalMergeRunner.hpp"
 #include "runners/ResultPrinter.hpp"
 #include "runners/StandardRunner.hpp"
+#include "strategies/AvellanedaStoikovStrategy.hpp"
+#include "strategies/FixedQuoteStrategy.hpp"
+#include "strategies/MicropriceAvellanedaStoikovStrategy.hpp"
 
 #include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 
 using namespace md;
@@ -46,6 +52,81 @@ RunResult runConfiguredMode(const AppConfig& config, IMarketDataEventProcessor& 
     throw std::runtime_error("unsupported run mode");
 }
 
+FixedQuoteStrategyConfig fixedQuoteConfig(const AppConfig& config) {
+    return FixedQuoteStrategyConfig{
+        .instrument_id = config.backtest_instrument_id,
+        .order_size = config.order_size,
+        .quote_offset_ticks = config.quote_offset_ticks,
+        .tick_size = config.tick_size,
+        .quote_interval_events = config.quote_interval_events,
+        .max_inventory = config.max_inventory
+    };
+}
+
+AvellanedaStoikovConfig avellanedaStoikovConfig(const AppConfig& config) {
+    return AvellanedaStoikovConfig{
+        .instrument_id = config.backtest_instrument_id,
+        .order_size = config.order_size,
+        .gamma = config.gamma,
+        .sigma = config.sigma,
+        .k = config.k,
+        .horizon_seconds = config.horizon_seconds,
+        .tick_size = config.tick_size,
+        .max_inventory = config.max_inventory,
+        .quote_interval_events = config.quote_interval_events
+    };
+}
+
+MicropriceAvellanedaStoikovConfig micropriceAvellanedaStoikovConfig(const AppConfig& config) {
+    return MicropriceAvellanedaStoikovConfig{
+        .instrument_id = config.backtest_instrument_id,
+        .order_size = config.order_size,
+        .gamma = config.gamma,
+        .sigma = config.sigma,
+        .k = config.k,
+        .horizon_seconds = config.horizon_seconds,
+        .tick_size = config.tick_size,
+        .max_inventory = config.max_inventory,
+        .quote_interval_events = config.quote_interval_events,
+        .use_imbalance_skew = config.use_imbalance_skew,
+        .imbalance_alpha_ticks = config.imbalance_alpha_ticks
+    };
+}
+
+std::unique_ptr<Strategy> makeBacktestStrategy(const AppConfig& config) {
+    if (config.strategy_name == "fixed_quote") {
+        return std::make_unique<FixedQuoteStrategy>(fixedQuoteConfig(config));
+    }
+    if (config.strategy_name == "avellaneda_stoikov") {
+        return std::make_unique<AvellanedaStoikovStrategy>(avellanedaStoikovConfig(config));
+    }
+    if (config.strategy_name == "microprice_avellaneda_stoikov") {
+        return std::make_unique<MicropriceAvellanedaStoikovStrategy>(
+            micropriceAvellanedaStoikovConfig(config)
+        );
+    }
+
+    throw std::runtime_error("unknown backtest strategy: " + config.strategy_name);
+}
+
+BacktestReport makeBacktestReport(
+    const BacktestMarketDataEventProcessor& processor,
+    const AppConfig& config,
+    const RunResult& result
+) {
+    return md::makeBacktestReport(BacktestReportInput{
+        .strategy_name = config.strategy_name,
+        .instrument_id = config.backtest_instrument_id,
+        .events_processed = result.summary.total_messages_processed,
+        .orders_placed = processor.orders().totalPlaced(),
+        .orders_cancelled = processor.orders().totalCancelled(),
+        .metrics = processor.metrics().current(),
+        .max_inventory = processor.metrics().maxInventory(),
+        .average_inventory = processor.metrics().averageInventory(),
+        .wall_clock_seconds = result.wall_clock_seconds
+    });
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -78,6 +159,15 @@ int main(int argc, char* argv[]) {
                 runLoggingBenchmark(config.input_path, config.input_format, config.verbose, std::cerr),
                 std::cout
             );
+            return 0;
+        }
+
+        if (config.backtest_enabled) {
+            auto strategy = makeBacktestStrategy(config);
+            BacktestMarketDataEventProcessor processor{*strategy};
+            const RunResult result = runConfiguredMode(config, processor);
+            printBacktestReport(makeBacktestReport(processor, config, result), std::cout);
+            printRunResult(result, std::cout, config.verbose, 0);
             return 0;
         }
 

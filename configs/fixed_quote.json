@@ -1,0 +1,13 @@
+{
+  "mode": "standard",
+  "input": "tests/test_data/lob_standard_synthetic.ndjson",
+  "backtest": true,
+  "strategy": "fixed_quote",
+  "instrument_id": 1,
+  "order_size": 1,
+  "tick_size": 1000000000,
+  "quote_offset_ticks": 1,
+  "quote_interval_events": 1,
+  "max_inventory": 10,
+  "cli": "./build/ingest --mode standard --input tests/test_data/lob_standard_synthetic.ndjson --backtest --strategy fixed_quote --instrument-id 1 --order-size 1 --tick-size 1000000000 --quote-offset-ticks 1 --quote-interval-events 1 --max-inventory 10"
+}

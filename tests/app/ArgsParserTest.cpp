@@ -216,6 +216,153 @@ void testArgsParserAcceptsLobWithBenchmarkMode() {
     std::filesystem::remove_all(dir);
 }
 
+void testArgsParserAcceptsBacktestFixedQuote() {
+    const auto dir = makeTempDir("args_backtest_fixed_quote");
+    const auto file = dir / "sample.ndjson";
+    writeFile(file, line(1, 1) + "\n");
+
+    const auto config = parseArgs({
+        "ingest",
+        "--mode", "standard",
+        "--input", file.string(),
+        "--backtest",
+        "--strategy", "fixed_quote",
+        "--instrument-id", "1",
+        "--order-size", "10",
+        "--tick-size", "1000000000",
+        "--quote-offset-ticks", "1",
+    });
+
+    require(config.mode == RunMode::Standard, "args_parser_accepts_backtest_fixed_quote: mode");
+    require(config.backtest_enabled, "args_parser_accepts_backtest_fixed_quote: backtest flag");
+    require(config.strategy_name == "fixed_quote", "args_parser_accepts_backtest_fixed_quote: strategy");
+    require(config.backtest_instrument_id == 1, "args_parser_accepts_backtest_fixed_quote: instrument id");
+    require(config.order_size == 10, "args_parser_accepts_backtest_fixed_quote: order size");
+    require(config.tick_size == 1'000'000'000, "args_parser_accepts_backtest_fixed_quote: tick size");
+    require(config.quote_offset_ticks == 1, "args_parser_accepts_backtest_fixed_quote: quote offset");
+
+    std::filesystem::remove_all(dir);
+}
+
+void testArgsParserAcceptsBacktestAvellanedaStoikov() {
+    const auto dir = makeTempDir("args_backtest_as");
+    const auto file = dir / "sample.ndjson";
+    writeFile(file, line(1, 1) + "\n");
+
+    const auto config = parseArgs({
+        "ingest",
+        "--mode", "standard",
+        "--input", file.string(),
+        "--backtest",
+        "--strategy", "avellaneda_stoikov",
+        "--instrument-id", "442",
+        "--order-size", "2",
+        "--tick-size", "10000",
+        "--quote-interval-events", "5",
+        "--gamma", "0.2",
+        "--sigma", "1.5",
+        "--k", "0.8",
+        "--horizon-seconds", "10",
+    });
+
+    require(config.strategy_name == "avellaneda_stoikov", "args_parser_accepts_backtest_as: strategy");
+    require(config.quote_interval_events == 5, "args_parser_accepts_backtest_as: interval");
+    require(config.gamma == 0.2L, "args_parser_accepts_backtest_as: gamma");
+    require(config.sigma == 1.5L, "args_parser_accepts_backtest_as: sigma");
+    require(config.k == 0.8L, "args_parser_accepts_backtest_as: k");
+    require(config.horizon_seconds == 10.0L, "args_parser_accepts_backtest_as: horizon");
+
+    std::filesystem::remove_all(dir);
+}
+
+void testArgsParserAcceptsBacktestMicropriceAvellanedaStoikov() {
+    const auto dir = makeTempDir("args_backtest_microprice_as");
+    const auto file = dir / "sample.ndjson";
+    writeFile(file, line(1, 1) + "\n");
+
+    const auto config = parseArgs({
+        "ingest",
+        "--mode", "standard",
+        "--input", file.string(),
+        "--backtest",
+        "--strategy", "microprice_avellaneda_stoikov",
+        "--instrument-id", "442",
+        "--tick-size", "10000",
+        "--imbalance-skew",
+        "--imbalance-alpha-ticks", "0.5",
+    });
+
+    require(
+        config.strategy_name == "microprice_avellaneda_stoikov",
+        "args_parser_accepts_backtest_microprice_as: strategy"
+    );
+    require(config.use_imbalance_skew, "args_parser_accepts_backtest_microprice_as: imbalance flag");
+    require(config.imbalance_alpha_ticks == 0.5L, "args_parser_accepts_backtest_microprice_as: alpha");
+
+    std::filesystem::remove_all(dir);
+}
+
+void testArgsParserRejectsBacktestWithoutStrategy() {
+    const auto dir = makeTempDir("args_backtest_no_strategy");
+    const auto file = dir / "sample.ndjson";
+    writeFile(file, line(1, 1) + "\n");
+
+    expectArgsErrorContains(
+        {
+            "ingest",
+            "--mode", "standard",
+            "--input", file.string(),
+            "--backtest",
+            "--instrument-id", "1",
+        },
+        "--backtest requires --strategy",
+        "args_parser_rejects_backtest_without_strategy"
+    );
+
+    std::filesystem::remove_all(dir);
+}
+
+void testArgsParserRejectsBacktestWithoutInstrumentId() {
+    const auto dir = makeTempDir("args_backtest_no_instrument");
+    const auto file = dir / "sample.ndjson";
+    writeFile(file, line(1, 1) + "\n");
+
+    expectArgsErrorContains(
+        {
+            "ingest",
+            "--mode", "standard",
+            "--input", file.string(),
+            "--backtest",
+            "--strategy", "fixed_quote",
+        },
+        "--backtest requires --instrument-id",
+        "args_parser_rejects_backtest_without_instrument_id"
+    );
+
+    std::filesystem::remove_all(dir);
+}
+
+void testArgsParserAcceptsTickSize() {
+    const auto dir = makeTempDir("args_backtest_tick_size");
+    const auto file = dir / "sample.ndjson";
+    writeFile(file, line(1, 1) + "\n");
+
+    const auto config = parseArgs({
+        "ingest",
+        "--mode", "standard",
+        "--input", file.string(),
+        "--backtest",
+        "--strategy", "fixed_quote",
+        "--instrument-id", "442",
+        "--tick-size", "10000",
+    });
+
+    require(config.backtest_enabled, "args_parser_accepts_tick_size: backtest flag");
+    require(config.tick_size == 10'000, "args_parser_accepts_tick_size: tick size");
+
+    std::filesystem::remove_all(dir);
+}
+
 void testUsageMentionsLobOptions() {
     const auto usage = ArgsParser::usage("ingest");
 
@@ -228,6 +375,27 @@ void testUsageMentionsLobOptions() {
     requireContains(usage, "--snapshot-writer sync|async", "usage mentions snapshot writer");
     requireContains(usage, "--snapshot-output PATH", "usage mentions snapshot output");
     requireContains(usage, "--input-format json|feather", "usage mentions input format");
+}
+
+void testUsageMentionsBacktestOptions() {
+    const auto usage = ArgsParser::usage("ingest");
+
+    requireContains(usage, "--backtest", "usage mentions backtest");
+    requireContains(usage, "--strategy fixed_quote", "usage mentions fixed quote strategy");
+    requireContains(usage, "--instrument-id ID", "usage mentions instrument id");
+    requireContains(usage, "--order-size N", "usage mentions order size");
+    requireContains(usage, "--tick-size PRICE_UNITS", "usage mentions tick size");
+    requireContains(usage, "--quote-offset-ticks N", "usage mentions quote offset ticks");
+    requireContains(usage, "--quote-interval-events N", "usage mentions quote interval");
+    requireContains(usage, "--max-inventory N", "usage mentions max inventory");
+    requireContains(usage, "avellaneda_stoikov", "usage mentions avellaneda strategy");
+    requireContains(usage, "microprice_avellaneda_stoikov", "usage mentions microprice strategy");
+    requireContains(usage, "--gamma X", "usage mentions gamma");
+    requireContains(usage, "--sigma X", "usage mentions sigma");
+    requireContains(usage, "--k X", "usage mentions k");
+    requireContains(usage, "--horizon-seconds X", "usage mentions horizon");
+    requireContains(usage, "--imbalance-skew", "usage mentions imbalance skew");
+    requireContains(usage, "--imbalance-alpha-ticks X", "usage mentions imbalance alpha");
 }
 
 } // namespace md::test
