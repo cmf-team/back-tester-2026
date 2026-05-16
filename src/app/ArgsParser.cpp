@@ -29,6 +29,28 @@ RunMode parseModeValue(const std::string& value) {
     throw ArgsError("unknown mode: " + value);
 }
 
+SnapshotWriterMode parseSnapshotWriterMode(const std::string& value) {
+    if (value == "sync") {
+        return SnapshotWriterMode::Sync;
+    }
+    if (value == "async") {
+        return SnapshotWriterMode::Async;
+    }
+
+    throw ArgsError("unknown snapshot writer mode: " + value);
+}
+
+InputFormat parseInputFormat(const std::string& value) {
+    if (value == "json") {
+        return InputFormat::Json;
+    }
+    if (value == "feather") {
+        return InputFormat::Feather;
+    }
+
+    throw ArgsError("unknown input format: " + value);
+}
+
 std::size_t parseSize(const std::string& value, const std::string& option) {
     try {
         std::size_t pos = 0;
@@ -49,6 +71,18 @@ void validateInput(const AppConfig& config) {
         return;
     }
 
+    if (config.snapshot_interval_events == 0 && config.mode != RunMode::Benchmark) {
+        throw ArgsError("snapshot interval must be greater than zero");
+    }
+
+    if (config.lob_workers == 0) {
+        throw ArgsError("lob worker count must be greater than zero");
+    }
+
+    if (config.lob_workers != 1 && !config.use_lob_processor) {
+        throw ArgsError("--lob-workers requires --lob");
+    }
+
     if (config.input_path.empty()) {
         throw ArgsError("input path is required");
     }
@@ -59,6 +93,10 @@ void validateInput(const AppConfig& config) {
 
     if (config.mode == RunMode::Standard && !std::filesystem::is_regular_file(config.input_path)) {
         throw ArgsError("standard mode expects a file path: " + config.input_path.string());
+    }
+
+    if (config.mode == RunMode::Standard && config.input_format == InputFormat::Feather) {
+        throw ArgsError("--input-format feather is supported only with flat, hierarchy, and benchmark modes");
     }
 
     if ((config.mode == RunMode::Flat || config.mode == RunMode::Hierarchy || config.mode == RunMode::Benchmark)
@@ -84,7 +122,9 @@ AppConfig ArgsParser::parse(int argc, char* argv[]) {
     }
 
     if (args.size() == 1 && isHelp(args[0])) {
-        return AppConfig{RunMode::Help, {}, false, 10};
+        AppConfig config;
+        config.mode = RunMode::Help;
+        return config;
     }
 
     // Backward-compatible Standard task mode: ./ingest /path/to/day.json
@@ -104,11 +144,23 @@ AppConfig ArgsParser::parse(int argc, char* argv[]) {
         const std::string& arg = args[i];
 
         if (isHelp(arg)) {
-            return AppConfig{RunMode::Help, {}, false, 10};
+            AppConfig help_config;
+            help_config.mode = RunMode::Help;
+            return help_config;
         }
 
         if (arg == "--verbose" || arg == "-v") {
             config.verbose = true;
+            continue;
+        }
+
+        if (arg == "--lob") {
+            config.use_lob_processor = true;
+            continue;
+        }
+
+        if (arg == "--async-snapshots") {
+            config.snapshot_writer_mode = SnapshotWriterMode::Async;
             continue;
         }
 
@@ -130,6 +182,14 @@ AppConfig ArgsParser::parse(int argc, char* argv[]) {
             continue;
         }
 
+        if (arg == "--input-format") {
+            if (i + 1 >= args.size()) {
+                throw ArgsError("--input-format requires a value");
+            }
+            config.input_format = parseInputFormat(args[++i]);
+            continue;
+        }
+
         if (arg == "--benchmark") {
             if (i + 1 >= args.size()) {
                 throw ArgsError("--benchmark requires a folder path");
@@ -146,6 +206,54 @@ AppConfig ArgsParser::parse(int argc, char* argv[]) {
                 throw ArgsError("--print-events requires a number");
             }
             config.max_events_to_print = parseSize(args[++i], "--print-events");
+            continue;
+        }
+
+        if (arg == "--snapshot-depth") {
+            if (i + 1 >= args.size()) {
+                throw ArgsError("--snapshot-depth requires a number");
+            }
+            config.snapshot_depth = parseSize(args[++i], "--snapshot-depth");
+            continue;
+        }
+
+        if (arg == "--snapshot-interval-events") {
+            if (i + 1 >= args.size()) {
+                throw ArgsError("--snapshot-interval-events requires a number");
+            }
+            config.snapshot_interval_events = parseSize(args[++i], "--snapshot-interval-events");
+            continue;
+        }
+
+        if (arg == "--max-snapshots") {
+            if (i + 1 >= args.size()) {
+                throw ArgsError("--max-snapshots requires a number");
+            }
+            config.max_snapshots = parseSize(args[++i], "--max-snapshots");
+            continue;
+        }
+
+        if (arg == "--lob-workers") {
+            if (i + 1 >= args.size()) {
+                throw ArgsError("--lob-workers requires a number");
+            }
+            config.lob_workers = parseSize(args[++i], "--lob-workers");
+            continue;
+        }
+
+        if (arg == "--snapshot-writer") {
+            if (i + 1 >= args.size()) {
+                throw ArgsError("--snapshot-writer requires a value");
+            }
+            config.snapshot_writer_mode = parseSnapshotWriterMode(args[++i]);
+            continue;
+        }
+
+        if (arg == "--snapshot-output") {
+            if (i + 1 >= args.size()) {
+                throw ArgsError("--snapshot-output requires a path");
+            }
+            config.snapshot_output_path = args[++i];
             continue;
         }
 
@@ -185,10 +293,10 @@ std::string ArgsParser::usage(const std::string& executable_name) {
     std::ostringstream oss;
     oss << "Usage:\n"
         << "  " << executable_name << " <path_to_single_ndjson_file>\n"
-        << "  " << executable_name << " --mode standard --input <path_to_single_ndjson_file> [--verbose] [--print-events N]\n"
-        << "  " << executable_name << " --mode flat --input <path_to_folder> [--verbose] [--print-events N]\n"
-        << "  " << executable_name << " --mode hierarchy --input <path_to_folder> [--verbose] [--print-events N]\n"
-        << "  " << executable_name << " --benchmark <path_to_folder>\n"
+        << "  " << executable_name << " --mode standard --input <path_to_single_ndjson_file> [--verbose] [--print-events N] [--lob] [--lob-workers N] [--snapshot-depth N] [--snapshot-interval-events N] [--max-snapshots N] [--snapshot-writer sync|async] [--async-snapshots] [--snapshot-output PATH]\n"
+        << "  " << executable_name << " --mode flat --input <path_to_folder> [--input-format json|feather] [--verbose] [--print-events N] [--lob] [--lob-workers N] [--snapshot-depth N] [--snapshot-interval-events N] [--max-snapshots N] [--snapshot-writer sync|async] [--async-snapshots] [--snapshot-output PATH]\n"
+        << "  " << executable_name << " --mode hierarchy --input <path_to_folder> [--input-format json|feather] [--verbose] [--print-events N] [--lob] [--lob-workers N] [--snapshot-depth N] [--snapshot-interval-events N] [--max-snapshots N] [--snapshot-writer sync|async] [--async-snapshots] [--snapshot-output PATH]\n"
+        << "  " << executable_name << " --benchmark <path_to_folder> [--input-format json|feather] [--lob] [--lob-workers N]\n"
         << "\nShortcuts:\n"
         << "  " << executable_name << " standard <path_to_single_ndjson_file>\n"
         << "  " << executable_name << " flat <path_to_folder>\n"

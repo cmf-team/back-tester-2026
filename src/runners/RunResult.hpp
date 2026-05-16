@@ -64,4 +64,13 @@ struct RunResult {
     double wall_clock_seconds{};
 };
 
+struct BenchmarkResult {
+    RunResult result;
+    std::string input_format{"json"};
+    std::string processor{"logging"};
+    std::size_t unresolved_events{};
+    std::size_t lob_workers{};
+    std::string lob_digest;
+};
+
 } // namespace md

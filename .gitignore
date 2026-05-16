@@ -27,7 +27,9 @@ Thumbs.db
 
 # Large local data files
 data/*
+data_feather/
 big/
+*.feather
 *.mbo
 *.mbo.json
 *.ndjson
@@ -52,3 +54,7 @@ logs/
 
 # Keep the small sample file
 !data/sample.ndjson
+
+# Python cache
+__pycache__/
+*.pyc

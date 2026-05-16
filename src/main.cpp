@@ -1,13 +1,18 @@
 #include "app/ArgsParser.hpp"
 #include "processing/LoggingMarketDataEventProcessor.hpp"
+#include "processing/LobMarketDataEventProcessor.hpp"
+#include "processing/ShardedLobMarketDataEventProcessor.hpp"
+#include "runners/BenchmarkRunner.hpp"
 #include "runners/FlatMergeRunner.hpp"
 #include "runners/HierarchicalMergeRunner.hpp"
 #include "runners/ResultPrinter.hpp"
 #include "runners/StandardRunner.hpp"
 
 #include <exception>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
-#include <vector>
+#include <stdexcept>
 
 using namespace md;
 
@@ -18,9 +23,21 @@ RunResult runConfiguredMode(const AppConfig& config, IMarketDataEventProcessor& 
         case RunMode::Standard:
             return StandardRunner{}.run(config.input_path, processor, config.verbose, std::cerr);
         case RunMode::Flat:
-            return FlatMergeRunner{}.run(config.input_path, processor, config.verbose, std::cerr);
+            return FlatMergeRunner{}.run(
+                config.input_path,
+                processor,
+                config.verbose,
+                std::cerr,
+                config.input_format
+            );
         case RunMode::Hierarchy:
-            return HierarchicalMergeRunner{}.run(config.input_path, processor, config.verbose, std::cerr);
+            return HierarchicalMergeRunner{}.run(
+                config.input_path,
+                processor,
+                config.verbose,
+                std::cerr,
+                config.input_format
+            );
         case RunMode::Benchmark:
         case RunMode::Help:
             break;
@@ -43,24 +60,69 @@ int main(int argc, char* argv[]) {
         }
 
         if (config.mode == RunMode::Benchmark) {
-            std::vector<RunResult> benchmark_results;
-            benchmark_results.reserve(2);
-
-            {
-                LoggingMarketDataEventProcessor processor(std::cout, 0);
-                benchmark_results.push_back(
-                    FlatMergeRunner{}.run(config.input_path, processor, config.verbose, std::cerr)
+            if (config.use_lob_processor) {
+                printLobBenchmarkResults(
+                    runLobBenchmark(
+                        config.input_path,
+                        config.input_format,
+                        config.verbose,
+                        std::cerr,
+                        config.lob_workers
+                    ),
+                    std::cout
                 );
+                return 0;
             }
 
-            {
-                LoggingMarketDataEventProcessor processor(std::cout, 0);
-                benchmark_results.push_back(
-                    HierarchicalMergeRunner{}.run(config.input_path, processor, config.verbose, std::cerr)
-                );
+            printBenchmarkResults(
+                runLoggingBenchmark(config.input_path, config.input_format, config.verbose, std::cerr),
+                std::cout
+            );
+            return 0;
+        }
+
+        if (config.use_lob_processor) {
+            const LobProcessorConfig lob_config{
+                .snapshot_depth = config.snapshot_depth,
+                .snapshot_interval_events = config.snapshot_interval_events,
+                .max_snapshots = config.max_snapshots,
+                .snapshot_writer_mode = config.snapshot_writer_mode,
+            };
+
+            std::ofstream snapshot_file;
+            std::ostream* snapshot_out = &std::cout;
+            if (!config.snapshot_output_path.empty()) {
+                const auto parent_path = config.snapshot_output_path.parent_path();
+                if (!parent_path.empty()) {
+                    std::filesystem::create_directories(parent_path);
+                }
+                snapshot_file.open(config.snapshot_output_path);
+                if (!snapshot_file.is_open()) {
+                    throw std::runtime_error(
+                        "cannot open snapshot output: " + config.snapshot_output_path.string()
+                    );
+                }
+                snapshot_out = &snapshot_file;
             }
 
-            printBenchmarkResults(benchmark_results, std::cout);
+            if (config.lob_workers > 1) {
+                ShardedLobMarketDataEventProcessor processor(
+                    std::cout,
+                    *snapshot_out,
+                    config.lob_workers,
+                    lob_config
+                );
+                const RunResult result = runConfiguredMode(config, processor);
+                processor.finish();
+                processor.printFinalSummary(std::cout);
+                printRunResult(result, std::cout, config.verbose, 0);
+            } else {
+                LobMarketDataEventProcessor processor(std::cout, *snapshot_out, lob_config);
+                const RunResult result = runConfiguredMode(config, processor);
+                processor.finishSnapshots();
+                processor.printFinalSummary(std::cout);
+                printRunResult(result, std::cout, config.verbose, 0);
+            }
             return 0;
         }
 

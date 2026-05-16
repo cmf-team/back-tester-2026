@@ -17,4 +17,10 @@ MarketDataEvent parseMarketDataEventLine(
     std::uint64_t source_sequence
 );
 
+std::uint64_t parseTimestampText(std::string_view text);
+std::uint64_t parseUInt64Text(std::string_view text);
+std::int64_t parsePriceText(std::string_view text);
+Side parseSideText(std::string_view text);
+Action parseActionText(std::string_view text);
+
 }

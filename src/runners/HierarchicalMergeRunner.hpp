@@ -1,6 +1,7 @@
 #pragma once
 
 #include "processing/IMarketDataEventProcessor.hpp"
+#include "runners/InputFormat.hpp"
 #include "runners/RunResult.hpp"
 
 #include <filesystem>
@@ -14,7 +15,8 @@ public:
         const std::filesystem::path& folder_path,
         IMarketDataEventProcessor& processor,
         bool verbose,
-        std::ostream& err
+        std::ostream& err,
+        InputFormat input_format = InputFormat::Json
     ) const;
 };
 

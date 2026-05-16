@@ -2,6 +2,7 @@
 
 #include "concurrency/NonBlockingQueue.hpp"
 #include "processing/IMarketDataEventProcessor.hpp"
+#include "runners/InputFormat.hpp"
 #include "runners/QueueItem.hpp"
 #include "runners/RunResult.hpp"
 
@@ -33,7 +34,8 @@ struct ProducerSet {
 ProducerSet startProducerThreads(
     const std::vector<std::filesystem::path>& files,
     bool verbose,
-    std::ostream& err
+    std::ostream& err,
+    InputFormat input_format = InputFormat::Json
 );
 
 void mergeInputQueues(const std::vector<EventQueuePtr>& inputs, const EventQueuePtr& output);

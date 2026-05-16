@@ -66,14 +66,16 @@ RunResult HierarchicalMergeRunner::run(
     const std::filesystem::path& folder_path,
     IMarketDataEventProcessor& processor,
     bool verbose,
-    std::ostream& err
+    std::ostream& err,
+    InputFormat input_format
 ) const {
     RunResult result;
     result.strategy_name = "hierarchy";
 
-    const auto files = discoverInputFiles(folder_path);
+    const auto files = discoverInputFiles(folder_path, input_format);
     if (verbose) {
         err << "selected_mode=hierarchy\n"
+            << "input_format=" << inputFormatName(input_format) << '\n'
             << "discovered_files_count=" << files.size() << '\n'
             << "merge_strategy=4_way_tree\n";
     }
@@ -83,7 +85,8 @@ RunResult HierarchicalMergeRunner::run(
     ProducerSet producers = startProducerThreads(
         files,
         verbose,
-        err
+        err,
+        input_format
     );
 
     EventQueuePtr final_queue;

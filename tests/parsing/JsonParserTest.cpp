@@ -50,6 +50,9 @@ void testParserNullAndDecimalPrices() {
 
     const auto negative_decimal = parseMarketDataEventLine(line(100, 1, 'B', 'M', "\"-1.125000000\""), 1);
     require(negative_decimal.price == -1125000000, "negative decimal price converted to fixed int64");
+
+    const auto fixed_integer = parseMarketDataEventLine(line(100, 1, 'B', 'M', "100000000000"), 1);
+    require(fixed_integer.price == 100000000000LL, "integer price is already fixed precision");
 }
 
 void testParserTimestampFallbackAndNumericFields() {

@@ -33,7 +33,7 @@ bool isMetadataFile(const std::filesystem::path& path) {
            name == "metadata.json";
 }
 
-bool isSupportedDataFile(const std::filesystem::path& path) {
+bool isSupportedJsonDataFile(const std::filesystem::path& path) {
     const std::string filename = lower(path.filename().string());
 
     if (filename.empty() || filename.front() == '.') {
@@ -62,9 +62,33 @@ bool isSupportedDataFile(const std::filesystem::path& path) {
     return false;
 }
 
+bool isSupportedFeatherDataFile(const std::filesystem::path& path) {
+    const std::string filename = lower(path.filename().string());
+
+    if (filename.empty() || filename.front() == '.') {
+        return false;
+    }
+
+    return endsWith(filename, ".feather") || endsWith(filename, ".ftr");
+}
+
+bool isSupportedDataFile(const std::filesystem::path& path, InputFormat input_format) {
+    switch (input_format) {
+        case InputFormat::Json:
+            return isSupportedJsonDataFile(path);
+        case InputFormat::Feather:
+            return isSupportedFeatherDataFile(path);
+    }
+
+    return false;
+}
+
 } // namespace
 
-std::vector<std::filesystem::path> discoverInputFiles(const std::filesystem::path& folder_path) {
+std::vector<std::filesystem::path> discoverInputFiles(
+    const std::filesystem::path& folder_path,
+    InputFormat input_format
+) {
     if (!std::filesystem::exists(folder_path)) {
         throw std::runtime_error("input folder does not exist: " + folder_path.string());
     }
@@ -76,7 +100,7 @@ std::vector<std::filesystem::path> discoverInputFiles(const std::filesystem::pat
     std::vector<std::filesystem::path> files;
 
     for (const auto& entry : std::filesystem::recursive_directory_iterator(folder_path)) {
-        if (entry.is_regular_file() && isSupportedDataFile(entry.path())) {
+        if (entry.is_regular_file() && isSupportedDataFile(entry.path(), input_format)) {
             files.push_back(entry.path());
         }
     }
@@ -84,7 +108,12 @@ std::vector<std::filesystem::path> discoverInputFiles(const std::filesystem::pat
     std::sort(files.begin(), files.end());
 
     if (files.empty()) {
-        throw std::runtime_error("input folder contains no supported market-data files: " + folder_path.string());
+        throw std::runtime_error(
+            "input folder contains no supported "
+            + std::string(inputFormatName(input_format))
+            + " market-data files: "
+            + folder_path.string()
+        );
     }
 
     return files;

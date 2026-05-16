@@ -2,8 +2,11 @@
 
 #include "domain/MarketDataEvent.hpp"
 
+#include <cstdint>
 #include <iomanip>
 #include <iostream>
+#include <sstream>
+#include <string_view>
 
 namespace md {
 namespace {
@@ -22,6 +25,21 @@ void printEventList(const std::string& title, const Container& events, std::ostr
     }
 }
 
+std::string digestFingerprint(std::string_view digest) {
+    constexpr std::uint64_t fnv_offset_basis = 14695981039346656037ULL;
+    constexpr std::uint64_t fnv_prime = 1099511628211ULL;
+
+    std::uint64_t hash = fnv_offset_basis;
+    for (const unsigned char value : digest) {
+        hash ^= value;
+        hash *= fnv_prime;
+    }
+
+    std::ostringstream out;
+    out << "0x" << std::hex << std::setw(16) << std::setfill('0') << hash;
+    return out.str();
+}
+
 } // namespace
 
 void printRunResult(const RunResult& result, std::ostream& out, bool verbose, std::size_t max_events_to_print) {
@@ -31,10 +49,7 @@ void printRunResult(const RunResult& result, std::ostream& out, bool verbose, st
         out << "strategy=" << result.strategy_name << '\n';
     }
     out << "total_messages_processed=" << result.summary.total_messages_processed << '\n';
-
-    if (!is_standard || verbose) {
-        out << "chronological_violations=" << result.summary.chronological_violations << '\n';
-    }
+    out << "chronological_violations=" << result.summary.chronological_violations << '\n';
 
     if (result.summary.first_timestamp.has_value()) {
         out << "first_timestamp=" << *result.summary.first_timestamp << '\n';
@@ -44,7 +59,7 @@ void printRunResult(const RunResult& result, std::ostream& out, bool verbose, st
         out << "last_timestamp=<none>\n";
     }
 
-    if (!is_standard && result.wall_clock_seconds > 0.0) {
+    if (result.wall_clock_seconds > 0.0) {
         const double throughput = result.summary.total_messages_processed / result.wall_clock_seconds;
         out << std::fixed << std::setprecision(6);
         out << "wall_clock_seconds=" << result.wall_clock_seconds << '\n';
@@ -63,20 +78,53 @@ void printRunResult(const RunResult& result, std::ostream& out, bool verbose, st
     }
 }
 
-void printBenchmarkResults(const std::vector<RunResult>& results, std::ostream& out) {
+void printBenchmarkResults(const std::vector<BenchmarkResult>& results, std::ostream& out) {
     out << "Benchmark\n";
-    out << "Strategy,Messages,ChronologicalViolations,WallClockSeconds,ThroughputMessagesPerSecond\n";
+    out << "Strategy,InputFormat,Processor,Messages,ChronologicalViolations,UnresolvedEvents,"
+        << "WallClockSeconds,ThroughputMessagesPerSecond\n";
 
-    for (const auto& result : results) {
+    for (const auto& benchmark : results) {
+        const auto& result = benchmark.result;
         const double throughput = result.wall_clock_seconds > 0.0
             ? result.summary.total_messages_processed / result.wall_clock_seconds
             : 0.0;
 
         out << result.strategy_name << ','
+            << benchmark.input_format << ','
+            << benchmark.processor << ','
             << result.summary.total_messages_processed << ','
             << result.summary.chronological_violations << ','
+            << benchmark.unresolved_events << ','
             << std::fixed << std::setprecision(6) << result.wall_clock_seconds << ','
             << std::fixed << std::setprecision(2) << throughput << '\n';
+
+        out.unsetf(std::ios::floatfield);
+    }
+}
+
+void printLobBenchmarkResults(const std::vector<BenchmarkResult>& results, std::ostream& out) {
+    out << "Benchmark LOB\n";
+    out << "Strategy,InputFormat,Processor,Messages,ChronologicalViolations,UnresolvedEvents,"
+        << "WallClockSeconds,ThroughputMessagesPerSecond,LobDigest\n";
+
+    for (const auto& benchmark : results) {
+        const auto& result = benchmark.result;
+        const double throughput = result.wall_clock_seconds > 0.0
+            ? result.summary.total_messages_processed / result.wall_clock_seconds
+            : 0.0;
+        const std::string digest = benchmark.lob_digest.empty()
+            ? "<none>"
+            : digestFingerprint(benchmark.lob_digest);
+
+        out << result.strategy_name << ','
+            << benchmark.input_format << ','
+            << benchmark.processor << ','
+            << result.summary.total_messages_processed << ','
+            << result.summary.chronological_violations << ','
+            << benchmark.unresolved_events << ','
+            << std::fixed << std::setprecision(6) << result.wall_clock_seconds << ','
+            << std::fixed << std::setprecision(2) << throughput << ','
+            << digest << '\n';
 
         out.unsetf(std::ios::floatfield);
     }

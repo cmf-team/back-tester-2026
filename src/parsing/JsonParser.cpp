@@ -59,58 +59,10 @@ namespace md {
             return static_cast<std::uint64_t>(duration_cast<nanoseconds>(whole.time_since_epoch()).count()) + frac;
         }
 
-        std::int64_t parsePriceText(std::string_view t) {
-            const bool negative = !t.empty() && t.front() == '-';
-            std::size_t pos = negative ? 1 : 0;
-
-            std::int64_t whole = 0;
-            while (pos < t.size() && t[pos] != '.') {
-                whole = whole * 10 + (t[pos] - '0');
-                ++pos;
-            }
-
-            std::int64_t frac = 0;
-            int digits = 0;
-            if (pos < t.size() && t[pos] == '.') {
-                ++pos;
-                while (pos < t.size() && digits < fixed_point_digits) {
-                    frac = frac * 10 + (t[pos] - '0');
-                    ++pos;
-                    ++digits;
-                }
-            }
-            while (digits++ < fixed_point_digits) {
-                frac *= 10;
-            }
-
-            const std::int64_t price = whole * fixed_point_scale + frac;
-            return negative ? -price : price;
-        }
-
         std::int64_t readPrice(simdjson::ondemand::value v) {
             const std::string_view token = trimJsonToken(v.raw_json_token());
             if (token == "null") return undef_price;
             return parsePriceText(unquoteJsonToken(token));
-        }
-
-        Side toSide(std::string_view t) {
-            switch (t.front()) {
-                case 'A': return Side::Ask;
-                case 'B': return Side::Bid;
-                default: return Side::None;
-            }
-        }
-
-        Action toAction(std::string_view t) {
-            switch (t.front()) {
-                case 'A': return Action::Add;
-                case 'M': return Action::Modify;
-                case 'C': return Action::Cancel;
-                case 'R': return Action::Clear;
-                case 'T': return Action::Trade;
-                case 'F': return Action::Fill;
-                default: return Action::None;
-            }
         }
 
         std::uint64_t readUInt64Token(simdjson::ondemand::value value) {
@@ -121,7 +73,7 @@ namespace md {
         void readTimestamp(simdjson::ondemand::value value, std::uint64_t& target) {
             const std::string_view token = trimJsonToken(value.raw_json_token());
             if (!token.empty() && token.front() == '"') {
-                target = isoUtcToNs(unquoteJsonToken(token));
+                target = parseTimestampText(unquoteJsonToken(token));
             } else {
                 target = toUInt64(token);
             }
@@ -136,11 +88,11 @@ namespace md {
         }
 
         void readSide(simdjson::ondemand::value value, Side& target) {
-            target = toSide(value.get_string());
+            target = parseSideText(value.get_string());
         }
 
         void readAction(simdjson::ondemand::value value, Action& target) {
-            target = toAction(value.get_string());
+            target = parseActionText(value.get_string());
         }
 
         void readHeader(simdjson::ondemand::value value, MarketDataEvent& event) {
@@ -175,6 +127,75 @@ namespace md {
             } else if (key == "action") {
                 readAction(value, event.action);
             }
+        }
+    }
+
+    std::uint64_t parseTimestampText(std::string_view text) {
+        return text.find('T') == std::string_view::npos
+            ? toUInt64(text)
+            : isoUtcToNs(text);
+    }
+
+    std::uint64_t parseUInt64Text(std::string_view text) {
+        return toUInt64(text);
+    }
+
+    std::int64_t parsePriceText(std::string_view text) {
+        const bool negative = !text.empty() && text.front() == '-';
+        std::size_t pos = negative ? 1 : 0;
+        const bool has_decimal_point = text.find('.', pos) != std::string_view::npos;
+
+        std::int64_t whole = 0;
+        while (pos < text.size() && text[pos] != '.') {
+            whole = whole * 10 + (text[pos] - '0');
+            ++pos;
+        }
+
+        if (!has_decimal_point) {
+            return negative ? -whole : whole;
+        }
+
+        std::int64_t frac = 0;
+        int digits = 0;
+        if (pos < text.size() && text[pos] == '.') {
+            ++pos;
+            while (pos < text.size() && digits < fixed_point_digits) {
+                frac = frac * 10 + (text[pos] - '0');
+                ++pos;
+                ++digits;
+            }
+        }
+        while (digits++ < fixed_point_digits) {
+            frac *= 10;
+        }
+
+        const std::int64_t price = whole * fixed_point_scale + frac;
+        return negative ? -price : price;
+    }
+
+    Side parseSideText(std::string_view text) {
+        if (text.empty()) {
+            return Side::None;
+        }
+        switch (text.front()) {
+            case 'A': return Side::Ask;
+            case 'B': return Side::Bid;
+            default: return Side::None;
+        }
+    }
+
+    Action parseActionText(std::string_view text) {
+        if (text.empty()) {
+            return Action::None;
+        }
+        switch (text.front()) {
+            case 'A': return Action::Add;
+            case 'M': return Action::Modify;
+            case 'C': return Action::Cancel;
+            case 'R': return Action::Clear;
+            case 'T': return Action::Trade;
+            case 'F': return Action::Fill;
+            default: return Action::None;
         }
     }
 

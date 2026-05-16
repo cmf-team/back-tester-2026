@@ -13,14 +13,16 @@ RunResult FlatMergeRunner::run(
     const std::filesystem::path& folder_path,
     IMarketDataEventProcessor& processor,
     bool verbose,
-    std::ostream& err
+    std::ostream& err,
+    InputFormat input_format
 ) const {
     RunResult result;
     result.strategy_name = "flat";
 
-    const auto files = discoverInputFiles(folder_path);
+    const auto files = discoverInputFiles(folder_path, input_format);
     if (verbose) {
         err << "selected_mode=flat\n"
+            << "input_format=" << inputFormatName(input_format) << '\n'
             << "discovered_files_count=" << files.size() << '\n'
             << "merge_strategy=single_level_k_way_heap\n";
     }
@@ -30,7 +32,8 @@ RunResult FlatMergeRunner::run(
     ProducerSet producers = startProducerThreads(
         files,
         verbose,
-        err
+        err,
+        input_format
     );
     auto merged_queue = makeEventQueue();
 

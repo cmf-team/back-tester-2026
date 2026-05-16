@@ -5,9 +5,9 @@ A C++20 data-ingestion layer for an event-driven backtester. The project support
 - **Standard mode** reads one Databento NDJSON L3 file, creates `MarketDataEvent` objects, calls `processMarketDataEvent`, and prints the required summary plus the first/last 10 events.
 - **Flat mode** reads a folder of chronologically sorted daily files with one producer thread per file and performs a single-level k-way merge.
 - **Hierarchy mode** uses the same producers but merges streams through a binary tree of smaller mergers.
-- **Benchmark mode** runs both Hard-task strategies and reports message count, wall-clock time, and throughput.
+- **Benchmark mode** runs both Hard-task strategies and reports message count, wall-clock time, and throughput. With `--lob`, it benchmarks the same merge strategies while reconstructing final LOB state.
 
-The project has no third-party runtime dependency. The parser is a small flat JSON-object parser tuned for NDJSON market-data rows, so reviewers do not need to install `nlohmann/json` or any package beyond a C++20 compiler and CMake.
+The default JSON build has no third-party runtime dependency. The parser is a small flat JSON-object parser tuned for NDJSON market-data rows, so reviewers do not need to install `nlohmann/json` or any package beyond a C++20 compiler and CMake. Arrow C++ is optional and used only when configuring with `-DENABLE_ARROW=ON`.
 
 ## Quick start
 
@@ -17,10 +17,10 @@ The project has no third-party runtime dependency. The parser is a small flat JS
 ./run hierarchy data/multi
 ./run benchmark data/multi
 ./run test
-./scripts/benchmark.sh
+./scripts/benchmark.sh data/multi
 ```
 
-The `run` script builds the project first and then executes the requested mode. `scripts/benchmark.sh` builds a release binary and benchmarks the bundled `data/daily_20` folder by default.
+The `run` script builds the project first and then executes the requested mode. `scripts/benchmark.sh <folder>` builds a release binary and prints report-ready logging and LOB benchmark blocks for that folder.
 
 ## Manual build
 
@@ -45,6 +45,7 @@ Explicit modes:
 ./build/ingest --mode flat --input /path/to/folder
 ./build/ingest --mode hierarchy --input /path/to/folder
 ./build/ingest --benchmark /path/to/folder
+./build/ingest --benchmark /path/to/folder --lob
 ```
 
 Optional flags:
@@ -52,9 +53,240 @@ Optional flags:
 ```bash
 --verbose          Print parser diagnostics to stderr/stdout diagnostics section.
 --print-events N   Print the first N events observed by processMarketDataEvent.
+--lob              Reconstruct per-instrument LOBs in standard, flat, hierarchy, or benchmark mode.
+--lob-workers N    Use N sharded LOB workers; default 1 keeps the dispatcher-owned sequential BookManager.
+--snapshot-depth N Print N price levels per side in each LOB snapshot.
+--snapshot-interval-events N
+                   Print one LOB snapshot every N processed events.
+--max-snapshots N  Cap the number of printed LOB snapshots.
+--async-snapshots  Format and write LOB snapshots on a background worker.
+--snapshot-writer sync|async
+                   Select synchronous or asynchronous snapshot writing.
+--snapshot-output PATH
+                   Write LOB snapshots to PATH instead of stdout.
 ```
 
-`benchmark` mode suppresses per-event logging by default because printing every event would dominate the measured runtime.
+`benchmark` mode suppresses per-event logging by default because printing every event would dominate the measured runtime. `--benchmark ... --lob` also disables LOB snapshots by default so stdout is not part of the measured cost.
+
+## Homework 2 Standard: LOB Reconstruction
+
+Run:
+
+```bash
+./build/ingest --mode standard \
+  --input data/XEUR-20260409-HTT6HHLT6R/xeur-eobi-20260309.mbo.json \
+  --lob \
+  --snapshot-depth 5 \
+  --snapshot-interval-events 500000 \
+  --max-snapshots 4 \
+  --verbose
+```
+
+This mode reads one L3 NDJSON file, creates `MarketDataEvent` objects, routes them sequentially into `BookManager`, and maintains one `LimitOrderBook` per `instrument_id`.
+
+Event semantics:
+
+```text
+Add / Modify / Cancel / Clear mutate the book.
+Trade / Fill are explicitly handled as non-mutating events for the current reconstruction model.
+```
+
+Final `best_bid` / `best_ask` can be `<none>` when the file ends after exchange clear/reset events. Snapshots above the final summary demonstrate non-empty intraday book states.
+
+Validated real-file smoke result on `data/XEUR-20260409-HTT6HHLT6R/xeur-eobi-20260309.mbo.json`:
+
+```text
+total_messages_processed=2232542
+total_lines_read=2232542
+instrument_count=6
+chronological_violations=0
+unresolved_events=0
+wall_clock_seconds=1.169603
+throughput_messages_per_second=1908803.703721
+```
+
+The final output includes:
+
+```text
+LOB Snapshot
+...
+
+Final LOB Summary
+instrument_count=<N>
+processed_events=<N>
+unresolved_events=<N>
+instrument_id=<id> resting_orders=<N> best_bid=<price|<none>> best_ask=<price|<none>>
+...
+
+Summary
+total_messages_processed=<N>
+chronological_violations=0
+first_timestamp=<...>
+last_timestamp=<...>
+wall_clock_seconds=<positive>
+throughput_messages_per_second=<positive>
+Diagnostics
+total_lines_read=<N>
+```
+
+For the hard-task ingestion modes, the same LOB processor can run after the chronological merge:
+
+```bash
+./build/ingest --mode flat --input tests/test_data/hard_lob_synthetic \
+  --lob --snapshot-interval-events 3 --max-snapshots 2 --snapshot-depth 5 --verbose
+
+./build/ingest --mode hierarchy --input tests/test_data/hard_lob_synthetic \
+  --lob --snapshot-interval-events 3 --max-snapshots 2 --snapshot-depth 5 --verbose
+```
+
+Both modes dispatch the merged stream sequentially, so LOB updates remain deterministic. The synthetic hard LOB fixture verifies that a cancel with `instrument_id=0` is routed through the `order_id -> instrument_id` mapping.
+
+Flat and hierarchy LOB equivalence is tested automatically with `BookManager::stableStateDigest()`. The digest sorts instruments by `instrument_id`, bids descending, asks ascending, and includes processed/unresolved counts, best bid/ask, resting order counts, and all L2 price levels. Equal timestamps are deterministic because the merge comparator uses `(timestamp, source_file_id, source_sequence)`.
+
+Snapshot writing can be parallelized safely:
+
+```bash
+./build/ingest --mode flat \
+  --input data/XEUR-20260409-HTT6HHLT6R \
+  --lob \
+  --snapshot-depth 5 \
+  --snapshot-interval-events 1000000 \
+  --max-snapshots 3 \
+  --async-snapshots \
+  --snapshot-output logs/lob_snapshots.txt \
+  --verbose
+```
+
+The dispatcher still reads events in strict order and updates `BookManager` sequentially. When a snapshot is due, it copies immutable `BookManagerSnapshot` value data and submits that job to `AsyncSnapshotWriter`; the worker thread only formats/writes the copied data and has no access to mutable books.
+
+### Sharded LOB Workers
+
+`--lob-workers 2` and `--lob-workers 4` keep the global merge/dispatcher order, but route each resolved instrument to a fixed worker queue. Each worker owns its `BookManager` subset and updates its books sequentially, so per-instrument FIFO order is preserved.
+
+The dispatcher keeps a lightweight `order_id -> instrument_id` router index for events whose `instrument_id` is missing. `Add` records the mapping, `Modify` keeps or updates it, full `Cancel` and `Clear` remove it, and unknown missing-instrument events are counted as unresolved.
+
+For performance comparison:
+
+```bash
+./build/ingest --benchmark data/XEUR-20260409-HTT6HHLT6R --lob --lob-workers 1
+./build/ingest --benchmark data/XEUR-20260409-HTT6HHLT6R --lob --lob-workers 2
+./build/ingest --benchmark data/XEUR-20260409-HTT6HHLT6R --lob --lob-workers 4
+```
+
+Sharded benchmark rows use `Processor=lob-sharded-2` or `Processor=lob-sharded-4` and still include throughput plus the final LOB digest.
+
+## Homework 2 Hard Variant
+
+The Hard variant runs the same LOB processor after the globally merged flat or hierarchy stream. By default, LOB updates are sequential and dispatcher-owned: producers and mergers only create an ordered event stream, then one dispatcher calls the processor in final timestamp order. Bonus sharding is enabled only when `--lob-workers N` is greater than `1`.
+
+Flat and hierarchy differ only in how they merge sorted file streams. Flat uses one k-way heap over all file queues. Hierarchy builds a 4-way tree of smaller merger stages, which can spread merge work across more threads while preserving the same final order contract: `(timestamp, source_file_id, source_sequence)`. The final LOB digest is the strategy comparison key; matching digests mean both merge strategies reconstructed the same final book state.
+
+JSON hard LOB commands:
+
+```bash
+./build/ingest --mode flat \
+  --input data/XEUR-20260409-HTT6HHLT6R \
+  --lob \
+  --verbose
+
+./build/ingest --mode hierarchy \
+  --input data/XEUR-20260409-HTT6HHLT6R \
+  --lob \
+  --verbose
+```
+
+JSON benchmark command:
+
+```bash
+./build/ingest --benchmark data/XEUR-20260409-HTT6HHLT6R --lob
+```
+
+Feather conversion command:
+
+```bash
+python3 scripts/convert_to_feather.py \
+  --input data/XEUR-20260409-HTT6HHLT6R \
+  --output data_feather/XEUR-20260409-HTT6HHLT6R
+```
+
+Python JSON vs Feather read benchmark:
+
+```bash
+python3 scripts/benchmark_feather_read.py \
+  --json-input data/XEUR-20260409-HTT6HHLT6R \
+  --feather-input data_feather/XEUR-20260409-HTT6HHLT6R
+```
+
+Optional C++ Arrow Feather producer:
+
+```bash
+cmake -S . -B build-arrow -DCMAKE_BUILD_TYPE=Release -DENABLE_ARROW=ON
+cmake --build build-arrow -j
+
+./build-arrow/ingest --mode flat \
+  --input data_feather/XEUR-20260409-HTT6HHLT6R \
+  --input-format feather \
+  --lob \
+  --verbose
+
+./build-arrow/ingest --mode hierarchy \
+  --input data_feather/XEUR-20260409-HTT6HHLT6R \
+  --input-format feather \
+  --lob \
+  --verbose
+```
+
+Combined C++ JSON vs Feather benchmark:
+
+```bash
+./scripts/benchmark.sh \
+  data/XEUR-20260409-HTT6HHLT6R \
+  data_feather/XEUR-20260409-HTT6HHLT6R
+```
+
+JSON input is parsed from NDJSON text into `MarketDataEvent` objects. Feather input reads the same columns from Arrow/Feather files and maps each row to the same event contract, including `ts_recv`/`ts_event` timestamp fallback, fixed-point prices, null price handling, side/action enums, and source row metadata. Matching LOB digests across JSON and Feather confirm that the faster columnar path is behaviorally equivalent for final book reconstruction.
+
+Optional sharded LOB commands:
+
+```bash
+./build/ingest --benchmark data/XEUR-20260409-HTT6HHLT6R --lob --lob-workers 2
+./build/ingest --benchmark data/XEUR-20260409-HTT6HHLT6R --lob --lob-workers 4
+```
+
+Snapshot/log output is stateless async work. The async writer receives immutable snapshot data and only formats/writes copied state; it does not mutate books or change event order. LOB reconstruction remains sequential unless `--lob-workers` is explicitly enabled, in which case the dispatcher routes each resolved instrument to one worker FIFO queue and each worker updates its own `BookManager` subset sequentially.
+
+Core Hard task readiness:
+
+```text
+[PASS] ./build/ingest --mode flat --input <folder> --lob
+[PASS] ./build/ingest --mode hierarchy --input <folder> --lob
+[PASS] flat/hierarchy total_messages_processed equal
+[PASS] flat/hierarchy chronological_violations == 0
+[PASS] flat/hierarchy unresolved_events == 0 on the validated dataset
+[PASS] flat/hierarchy final LOB digest equal
+[PASS] benchmark --lob compares flat and hierarchy
+[PASS] async stateless snapshot/log worker exists
+[PASS] convert_to_feather.py exists
+[PASS] JSON vs Feather ingestion speed comparison exists
+[PASS] README documents all commands and results
+```
+
+Roadmap followed:
+
+```text
+H0. Baseline: current tests + Standard LOB + hard benchmark without LOB
+H1. Enable --lob for flat/hierarchy
+H2. Add flat vs hierarchy final LOB digest comparison
+H3. Real-folder JSON smoke for flat/hierarchy + LOB
+H4. Add --benchmark --lob
+H5. Add async stateless snapshot/log writer
+H6. Improve benchmark/report output
+H7. Add convert_to_feather.py
+H8. Add Python JSON vs Feather read benchmark
+H9. Optional: C++ Arrow Feather producer
+H10. Bonus: sharded LOB workers
+H11. README/CHANGES/report cleanup
+```
 
 ## Output
 
@@ -82,11 +314,21 @@ Benchmark output is CSV-like:
 
 ```text
 Benchmark
-Strategy,Messages,ChronologicalViolations,WallClockSeconds,ThroughputMessagesPerSecond
-standard,1305607,0,0.256,5100027.34
-flat,15175617,0,0.934796,16234154.21
-hierarchy,15175617,0,0.955811,20598115.56
+Strategy,InputFormat,Processor,Messages,ChronologicalViolations,UnresolvedEvents,WallClockSeconds,ThroughputMessagesPerSecond
+flat,json,logging,15175617,0,0,0.934796,16234154.21
+hierarchy,json,logging,15175617,0,0,0.955811,15876899.51
 ```
+
+LOB benchmark output includes the processor type, unresolved order-routed events, and a stable fingerprint of the final `BookManager::stableStateDigest()`:
+
+```text
+Benchmark LOB
+Strategy,InputFormat,Processor,Messages,ChronologicalViolations,UnresolvedEvents,WallClockSeconds,ThroughputMessagesPerSecond,LobDigest
+flat,json,lob,15175617,0,0,1.234567,12288736.42,0x0123456789abcdef
+hierarchy,json,lob,15175617,0,0,1.456789,10417183.36,0x0123456789abcdef
+```
+
+For report generation, `scripts/benchmark.sh <json-folder> [feather-folder]` builds Release and prints both blocks back to back: first logging-only ingestion/merge speed, then ingestion/merge plus LOB reconstruction. When a Feather folder is provided, it uses the Arrow-enabled build and appends the Feather rows to the same CSV-style blocks.
 
 ## Benchmark results
 
@@ -98,13 +340,19 @@ Benchmark environment:
 - Event printing: disabled
 - Data location: local APFS filesystem
 
-Latest benchmark output:
+Final benchmark table:
 
-| Strategy | Messages | Chronological violations | Wall-clock seconds | Throughput messages/s |
-| --- | ---: | ---: | ---: | ---: |
-| standard | 1,305,607 | 0 | 0.256000 | 5,100,027.34 |
-| flat | 15,175,617 | 0 | 0.934796 | 16,234,154.21 |
-| hierarchy | 15,175,617 | 0 | 0.955811 | 20,598,115.56 |
+| Mode | InputFormat | Processor | Messages | Violations | Unresolved | Seconds | Throughput |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
+| standard | json | lob | 2,232,542 | 0 | 0 | 1.169603 | 1,908,803.70 |
+| flat | json | lob | 19,869,718 | 0 | 0 | 5.220619 | 3,806,007.95 |
+| hierarchy | json | lob | 19,869,718 | 0 | 0 | 5.868775 | 3,385,667.17 |
+| flat | feather | lob | 19,869,718 | 0 | 0 | 4.012949 | 4,951,400.22 |
+| hierarchy | feather | lob | 19,869,718 | 0 | 0 | 4.159643 | 4,776,784.87 |
+| flat | json | lob-sharded-2 | 19,869,718 | 0 | 0 | 5.416377 | 3,668,451.50 |
+| flat | json | lob-sharded-4 | 19,869,718 | 0 | 0 | 5.358407 | 3,708,139.05 |
+
+All benchmark rows above have `chronological_violations=0`. The hard-folder LOB rows share the same final digest, `0xf068b976ad32134e`, across JSON flat/hierarchy, Feather flat/hierarchy, and sharded JSON runs.
 
 CPU / thread utilization was measured separately with `samply`, so use this table for concurrency behavior rather than direct throughput comparison:
 
@@ -154,7 +402,7 @@ public:
 };
 ```
 
-The current implementation is `LoggingMarketDataEventProcessor`. In the future, it can be replaced with a LOB updater, a statistics collector, or a mid-price calculator without changing the ingestion and merge code.
+The default implementation is `LoggingMarketDataEventProcessor`. Homework 2 Standard uses `LobMarketDataEventProcessor`, which updates `BookManager` and reconstructs per-instrument L2 books without changing the ingestion runner.
 
 ## Chronological order guarantee
 
@@ -225,6 +473,13 @@ The project uses lightweight C++ test executables instead of adding a third-part
 - `null` and decimal price handling;
 - CLI parsing and input validation;
 - Standard runner diagnostics;
+- LimitOrderBook Add/Cancel/Modify/Clear/Trade/Fill behavior;
+- BookManager multi-instrument routing and missing-instrument order lookup;
+- LobMarketDataEventProcessor snapshots and final summary;
+- StandardRunner + LOB synthetic NDJSON integration;
+- Flat/hierarchy LOB digest equivalence, including equal timestamp tie-breakers;
+- AsyncSnapshotWriter queue draining and sync/async LOB snapshot equivalence;
+- ResultPrinter standard-mode timing and throughput;
 - Flat merge chronological ordering;
 - Hierarchical merge chronological ordering.
 
@@ -232,6 +487,104 @@ Run:
 
 ```bash
 ./run test
+```
+
+## Feather Conversion
+
+Use `scripts/convert_to_feather.py` to convert Databento/XEUR NDJSON files into one Feather file per input file:
+
+```bash
+python3 scripts/convert_to_feather.py \
+  --input data/XEUR-20260409-HTT6HHLT6R \
+  --output data_feather/XEUR-20260409-HTT6HHLT6R
+```
+
+The script reads `.mbo.json`, `.jsonl`, and `.ndjson` files recursively, preserves row order within each file, and writes the relevant L3 fields:
+
+```text
+ts_recv, ts_event, instrument_id, order_id, side, action, price, size
+```
+
+`ts_event` and `instrument_id` are also read from Databento's nested `hd` object when they are not present at the top level. `price` is stored as a string column so quoted decimal prices and integer fixed-point prices are preserved exactly; JSON `null` prices remain Arrow nulls. The script requires `pyarrow`.
+
+Validated conversion result for `data/XEUR-20260409-HTT6HHLT6R`:
+
+```text
+converted_files=22
+total_rows=19869718
+total_json_lines=19869718
+per_file_row_counts_match=true
+first_last_ts_recv_preserved=true
+first_last_action_side_preserved=true
+null_price_preserved=true
+```
+
+To compare Python-side read cost for NDJSON parsing versus Feather reads:
+
+```bash
+python3 scripts/benchmark_feather_read.py \
+  --json-input data/XEUR-20260409-HTT6HHLT6R \
+  --feather-input data_feather/XEUR-20260409-HTT6HHLT6R
+```
+
+Validated read benchmark on the same folder:
+
+```text
+Format,Files,Rows,WallClockSeconds,RowsPerSecond
+json,22,19869718,55.574674,357531.89
+feather,22,19869718,1.515689,13109362.05
+```
+
+These are measured values for this machine and cache state; use the actual run output in reports rather than assuming a fixed speedup.
+
+## Optional C++ Feather Input
+
+Arrow C++ support is optional and kept out of the default build:
+
+```bash
+cmake -S . -B build-arrow -DCMAKE_BUILD_TYPE=Release -DENABLE_ARROW=ON
+cmake --build build-arrow -j
+ctest --test-dir build-arrow --output-on-failure
+```
+
+The Arrow-enabled unit test suite includes an opt-in real-folder check. To run it, set `MD_RUN_REAL_FEATHER_TEST=1`; `MD_REAL_JSON_FOLDER` and `MD_REAL_FEATHER_FOLDER` can override the default `data/...` and `data_feather/...` paths.
+
+When `ENABLE_ARROW=ON`, hard-task modes can read Feather folders directly:
+
+```bash
+./build-arrow/ingest --mode flat \
+  --input data_feather/XEUR-20260409-HTT6HHLT6R \
+  --input-format feather \
+  --lob \
+  --verbose
+
+./build-arrow/ingest --mode hierarchy \
+  --input data_feather/XEUR-20260409-HTT6HHLT6R \
+  --input-format feather \
+  --lob \
+  --verbose
+```
+
+The Feather producer maps each row into the same `MarketDataEvent` shape as the JSON parser: `timestamp = ts_recv` when present, otherwise `ts_event`; prices are converted to the fixed `1e-9` int64 convention; Arrow null prices become `UNDEF`; side/action strings are mapped to the project enums; and source metadata is assigned as `(source_file_id, row_index)`.
+
+Validated real-folder JSON vs Feather LOB benchmark:
+
+```text
+Strategy,InputFormat,Processor,Messages,ChronologicalViolations,UnresolvedEvents,WallClockSeconds,ThroughputMessagesPerSecond,LobDigest
+flat,json,lob,19869718,0,0,5.147601,3859995.85,0xf068b976ad32134e
+hierarchy,json,lob,19869718,0,0,6.070810,3272993.05,0xf068b976ad32134e
+flat,feather,lob,19869718,0,0,4.675216,4250010.52,0xf068b976ad32134e
+hierarchy,feather,lob,19869718,0,0,3.624509,5482043.36,0xf068b976ad32134e
+```
+
+The matching `LobDigest` confirms that JSON and Feather producers reconstruct the same final LOB state for this dataset.
+
+The combined C++ JSON vs Feather benchmark can be produced with:
+
+```bash
+./scripts/benchmark.sh \
+  data/XEUR-20260409-HTT6HHLT6R \
+  data_feather/XEUR-20260409-HTT6HHLT6R
 ```
 
 ## Future improvements

@@ -3,6 +3,9 @@
 #include "domain/MarketDataEvent.hpp"
 #include "io/MmapFile.hpp"
 #include "parsing/JsonParser.hpp"
+#ifdef MD_ENABLE_ARROW
+#include "runners/FeatherHardRunnerSupport.hpp"
+#endif
 
 #include <filesystem>
 #include <fstream>
@@ -66,8 +69,20 @@ void validateReadableFiles(const std::vector<std::filesystem::path>& files) {
 ProducerSet startProducerThreads(
     const std::vector<std::filesystem::path>& files,
     bool verbose,
-    std::ostream& err
+    std::ostream& err,
+    InputFormat input_format
 ) {
+    if (input_format == InputFormat::Feather) {
+#ifdef MD_ENABLE_ARROW
+        return startFeatherProducerThreads(files, verbose, err);
+#else
+        throw std::runtime_error(
+            "Feather input requires an Arrow-enabled build. "
+            "Rebuild with -DENABLE_ARROW=ON."
+        );
+#endif
+    }
+
     validateReadableFiles(files);
 
     if (verbose) {
