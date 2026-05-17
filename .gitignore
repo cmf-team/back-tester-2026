@@ -1,3 +1,14 @@
+CTestTestfile.cmake
+cmake_install.cmake
+back-tester.xcodeproj/
+.cmake/
+Catch2-prefix/
+CMakeFiles/
+cfg/
+googlebenchmark-prefix/
+CMakeScripts/
+include/
+compile_commands.json
 .idea/
 3rdparty/*
 build
