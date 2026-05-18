@@ -1,6 +1,7 @@
 #include "catch2/catch_all.hpp"
 #include "common/MarketDataEvent.hpp"
 #include "order_book/AbseilOrderBook.hpp"
+#include "order_book/LimitOrderBook.hpp"
 #include "order_book/MapOrderBook.hpp"
 
 #include <sstream>
@@ -101,7 +102,7 @@ TEMPLATE_TEST_CASE("OrderBook - add single ask", "[OrderBook]", MapOrderBook,
 }
 
 TEMPLATE_TEST_CASE("OrderBook - multiple bid levels, best bid is highest",
-                   "[OrderBook]", MapOrderBook, AbseilOrderBook)
+                   "[OrderBook]", MapOrderBook, AbseilOrderBook, LimitOrderBook)
 {
     TestType book;
     book.apply(make_add(1, Side::Buy, 4990'000'000'000LL, 3));
@@ -120,7 +121,7 @@ TEMPLATE_TEST_CASE("OrderBook - multiple bid levels, best bid is highest",
 }
 
 TEMPLATE_TEST_CASE("OrderBook - multiple ask levels, best ask is lowest",
-                   "[OrderBook]", MapOrderBook, AbseilOrderBook)
+                   "[OrderBook]", MapOrderBook, AbseilOrderBook, LimitOrderBook)
 {
     TestType book;
     book.apply(make_add(1, Side::Sell, 5020'000'000'000LL, 1));
@@ -135,7 +136,7 @@ TEMPLATE_TEST_CASE("OrderBook - multiple ask levels, best ask is lowest",
 }
 
 TEMPLATE_TEST_CASE("OrderBook - aggregate qty at same price level",
-                   "[OrderBook]", MapOrderBook, AbseilOrderBook)
+                   "[OrderBook]", MapOrderBook, AbseilOrderBook, LimitOrderBook)
 {
     TestType book;
     book.apply(make_add(1, Side::Buy, 5000'000'000'000LL, 10));
@@ -144,7 +145,7 @@ TEMPLATE_TEST_CASE("OrderBook - aggregate qty at same price level",
 }
 
 TEMPLATE_TEST_CASE("OrderBook - full cancel removes order and level",
-                   "[OrderBook]", MapOrderBook, AbseilOrderBook)
+                   "[OrderBook]", MapOrderBook, AbseilOrderBook, LimitOrderBook)
 {
     TestType book;
     book.apply(make_add(1, Side::Buy, 5000'000'000'000LL, 10));
@@ -154,7 +155,7 @@ TEMPLATE_TEST_CASE("OrderBook - full cancel removes order and level",
 }
 
 TEMPLATE_TEST_CASE("OrderBook - partial cancel reduces level qty",
-                   "[OrderBook]", MapOrderBook, AbseilOrderBook)
+                   "[OrderBook]", MapOrderBook, AbseilOrderBook, LimitOrderBook)
 {
     TestType book;
     book.apply(make_add(1, Side::Buy, 5000'000'000'000LL, 10));
@@ -164,7 +165,7 @@ TEMPLATE_TEST_CASE("OrderBook - partial cancel reduces level qty",
 }
 
 TEMPLATE_TEST_CASE("OrderBook - modify changes price level", "[OrderBook]",
-                   MapOrderBook, AbseilOrderBook)
+                   MapOrderBook, AbseilOrderBook, LimitOrderBook)
 {
     TestType book;
     book.apply(make_add(1, Side::Buy, 5000'000'000'000LL, 10));
@@ -175,7 +176,7 @@ TEMPLATE_TEST_CASE("OrderBook - modify changes price level", "[OrderBook]",
 }
 
 TEMPLATE_TEST_CASE("OrderBook - modify changes size at same price",
-                   "[OrderBook]", MapOrderBook, AbseilOrderBook)
+                   "[OrderBook]", MapOrderBook, AbseilOrderBook, LimitOrderBook)
 {
     TestType book;
     book.apply(make_add(1, Side::Buy, 5000'000'000'000LL, 10));
@@ -184,7 +185,7 @@ TEMPLATE_TEST_CASE("OrderBook - modify changes size at same price",
 }
 
 TEMPLATE_TEST_CASE("OrderBook - trade event leaves book unchanged",
-                   "[OrderBook]", MapOrderBook, AbseilOrderBook)
+                   "[OrderBook]", MapOrderBook, AbseilOrderBook, LimitOrderBook)
 {
     TestType book;
     book.apply(make_add(1, Side::Sell, 5010'000'000'000LL, 5));
@@ -193,7 +194,7 @@ TEMPLATE_TEST_CASE("OrderBook - trade event leaves book unchanged",
 }
 
 TEMPLATE_TEST_CASE("OrderBook - fill does not affect the book", "[OrderBook]",
-                   MapOrderBook, AbseilOrderBook)
+                   MapOrderBook, AbseilOrderBook, LimitOrderBook)
 {
     TestType book;
     book.apply(make_add(1, Side::Sell, 5010'000'000'000LL, 5));
@@ -203,7 +204,7 @@ TEMPLATE_TEST_CASE("OrderBook - fill does not affect the book", "[OrderBook]",
 }
 
 TEMPLATE_TEST_CASE("OrderBook - fill does not affect orders at shared level",
-                   "[OrderBook]", MapOrderBook, AbseilOrderBook)
+                   "[OrderBook]", MapOrderBook, AbseilOrderBook, LimitOrderBook)
 {
     TestType book;
     constexpr int64_t P = 5000'000'000'000LL;
@@ -218,7 +219,7 @@ TEMPLATE_TEST_CASE("OrderBook - fill does not affect orders at shared level",
 }
 
 TEMPLATE_TEST_CASE("OrderBook - fill does not modify any price levels",
-                   "[OrderBook]", MapOrderBook, AbseilOrderBook)
+                   "[OrderBook]", MapOrderBook, AbseilOrderBook, LimitOrderBook)
 {
     TestType book;
     constexpr int64_t P1 = 5000'000'000'000LL;
@@ -233,7 +234,7 @@ TEMPLATE_TEST_CASE("OrderBook - fill does not modify any price levels",
 }
 
 TEMPLATE_TEST_CASE("OrderBook - consecutive fills leave book unchanged",
-                   "[OrderBook]", MapOrderBook, AbseilOrderBook)
+                   "[OrderBook]", MapOrderBook, AbseilOrderBook, LimitOrderBook)
 {
     TestType book;
     constexpr int64_t P = 5000'000'000'000LL;
@@ -247,7 +248,7 @@ TEMPLATE_TEST_CASE("OrderBook - consecutive fills leave book unchanged",
 }
 
 TEMPLATE_TEST_CASE("OrderBook - clear wipes both sides", "[OrderBook]",
-                   MapOrderBook, AbseilOrderBook)
+                   MapOrderBook, AbseilOrderBook, LimitOrderBook)
 {
     TestType book;
     book.apply(make_add(1, Side::Buy, 5000'000'000'000LL, 10));
@@ -258,7 +259,7 @@ TEMPLATE_TEST_CASE("OrderBook - clear wipes both sides", "[OrderBook]",
 }
 
 TEMPLATE_TEST_CASE("OrderBook - print_snapshot contains expected lines",
-                   "[OrderBook]", MapOrderBook, AbseilOrderBook)
+                   "[OrderBook]", MapOrderBook, AbseilOrderBook, LimitOrderBook)
 {
     TestType book;
     book.apply(make_add(1, Side::Buy, 5000'000'000'000LL, 10));
@@ -272,4 +273,28 @@ TEMPLATE_TEST_CASE("OrderBook - print_snapshot contains expected lines",
     REQUIRE(out.find("SELL") != std::string::npos);
     REQUIRE(out.find("5000000000000") != std::string::npos);
     REQUIRE(out.find("5010000000000") != std::string::npos);
+}
+
+TEST_CASE("LimitOrderBook - unknown cancel throws", "[LimitOrderBook]")
+{
+    LimitOrderBook book;
+    book.apply(make_add(1, Side::Buy, 5000'000'000'000LL, 10));
+    REQUIRE_THROWS_AS(book.apply(make_cancel(999, 0)), std::runtime_error);
+}
+
+TEST_CASE("LimitOrderBook - unknown modify throws", "[LimitOrderBook]")
+{
+    LimitOrderBook book;
+    REQUIRE_THROWS_AS(
+        book.apply(make_modify(42, Side::Buy, 5000'000'000'000LL, 5)),
+        std::runtime_error);
+}
+
+TEST_CASE("LimitOrderBook - skips bad flags", "[LimitOrderBook]")
+{
+    LimitOrderBook book;
+    auto e = make_add(1, Side::Buy, 5000'000'000'000LL, 10);
+    e.flags = Flags::MaybeBadBook;
+    book.apply(e);
+    REQUIRE(book.empty(Side::Buy));
 }

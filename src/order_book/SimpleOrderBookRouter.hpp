@@ -1,6 +1,6 @@
 #pragma once
 
-#include "MapOrderBook.hpp"
+#include "LimitOrderBook.hpp"
 #include "OrderBookRouter.hpp"
 #include <memory_resource>
 #include <ostream>
@@ -11,7 +11,7 @@
 
 namespace cmf
 {
-template <typename BookType = MapOrderBook>
+template <typename BookType = LimitOrderBook>
 class SimpleOrderBookRouter
     : public OrderBookRouter<SimpleOrderBookRouter<BookType>>
 {
