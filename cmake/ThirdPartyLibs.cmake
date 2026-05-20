@@ -13,6 +13,29 @@ set(FORWARDED_CMAKE_ARGS
     -DCMAKE_INSTALL_LIBDIR=lib
 )
 
+if(APPLE AND CMAKE_OSX_SYSROOT)
+    list(APPEND FORWARDED_CMAKE_ARGS -DCMAKE_OSX_SYSROOT=${CMAKE_OSX_SYSROOT})
+    # libc++ headers require an explicit isystem on some Apple SDK + Clang combos.
+    set(_cmf_apple_cxx_flags
+        "-isysroot${CMAKE_OSX_SYSROOT}"
+        "-isystem${CMAKE_OSX_SYSROOT}/usr/include/c++/v1"
+        "-stdlib=libc++")
+    list(JOIN _cmf_apple_cxx_flags " " _cmf_apple_cxx_flags_str)
+    list(APPEND FORWARDED_CMAKE_ARGS
+        "-DCMAKE_CXX_FLAGS=${_cmf_apple_cxx_flags_str}"
+        "-DCMAKE_C_FLAGS=-isysroot${CMAKE_OSX_SYSROOT}")
+endif()
+
+# googlebenchmark uses the same SDK/cxx flags as other deps (needed for try_compile checks).
+set(BENCHMARK_CMAKE_ARGS ${FORWARDED_CMAKE_ARGS})
+
+# Arrow also needs the bitops workaround for older Apple Clang.
+set(ARROW_CMAKE_ARGS ${FORWARDED_CMAKE_ARGS})
+if(APPLE AND CMAKE_OSX_SYSROOT)
+    list(APPEND ARROW_CMAKE_ARGS
+        "-DCMAKE_CXX_FLAGS=${_cmf_apple_cxx_flags_str} -D__cpp_lib_bitops=201907L")
+endif()
+
 set(DESTDIR "")
 
 # ---------------------------------------------------------------------------------------
@@ -50,7 +73,7 @@ ExternalProject_Add(
     GIT_PROGRESS TRUE
     SOURCE_DIR "${CMAKE_SOURCE_DIR}/3rdparty/googlebenchmark"
     BINARY_DIR "${CMAKE_BINARY_DIR}/3rdparty/googlebenchmark"
-    CMAKE_ARGS ${FORWARDED_CMAKE_ARGS}
+    CMAKE_ARGS ${BENCHMARK_CMAKE_ARGS}
               -DBENCHMARK_ENABLE_TESTING=OFF
               -DBENCHMARK_ENABLE_GTEST_TESTS=OFF
     BUILD_COMMAND $(MAKE)
@@ -76,7 +99,7 @@ ExternalProject_Add(
         BINARY_DIR "${CMAKE_BINARY_DIR}/3rdparty/apache-arrow"
         SOURCE_SUBDIR cpp
         CMAKE_ARGS
-        ${FORWARDED_CMAKE_ARGS}
+        ${ARROW_CMAKE_ARGS}
         -DARROW_BUILD_SHARED=ON
         -DARROW_BUILD_STATIC=OFF
         -DARROW_BUILD_TESTS=OFF

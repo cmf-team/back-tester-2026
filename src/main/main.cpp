@@ -17,7 +17,6 @@
 
 #include "common/MarketDataEvent.hpp"
 #include "order_book/AbseilOrderBook.hpp"
-#include "order_book/MapOrderBook.hpp"
 #include "order_book/SimpleOrderBookRouter.hpp"
 
 #define PROCESS_MARKET_DATA_EVENT_MODE 1 // 1 = COUNT mode, 2 = PRINT mode

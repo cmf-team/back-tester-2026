@@ -1,5 +1,6 @@
 #include "common/MarketDataEvent.hpp"
 #include "order_book/AbseilOrderBook.hpp"
+#include "order_book/LimitOrderBook.hpp"
 #include "order_book/MapOrderBook.hpp"
 #include <benchmark/benchmark.h>
 
@@ -83,4 +84,5 @@ static void BM_OrderBook_Apply(benchmark::State& state)
         ->DisplayAggregatesOnly()
 
 REGISTER_OB_BENCH(cmf::MapOrderBook);
+REGISTER_OB_BENCH(cmf::LimitOrderBook);
 REGISTER_OB_BENCH(cmf::AbseilOrderBook);
