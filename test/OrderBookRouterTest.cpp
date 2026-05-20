@@ -1,7 +1,7 @@
 #include "catch2/catch_all.hpp"
 #include "common/MarketDataEvent.hpp"
-#include "order_book/ShardedOrderBookRouter.hpp"
 #include "order_book/MapOrderBook.hpp"
+#include "order_book/ShardedOrderBookRouter.hpp"
 #include "order_book/SimpleOrderBookRouter.hpp"
 
 #include <sstream>

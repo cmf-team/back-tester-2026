@@ -1,11 +1,9 @@
 #pragma once
 
 #include "OrderBook.hpp"
-#include <map>
-#include <memory_resource>
+#include "PmrCompat.hpp"
 #include <span>
 #include <tuple>
-#include <unordered_map>
 #include <utility>
 
 namespace cmf
@@ -14,24 +12,29 @@ class MapOrderBook : public OrderBook<MapOrderBook>
 {
     friend class OrderBook<MapOrderBook>;
 
-    using BidMap = std::pmr::map<ScaledPrice, ScaledPrice, std::greater<ScaledPrice>>;
-    using AskMap = std::pmr::map<ScaledPrice, ScaledPrice>;
+    using BidMap = PmrMap<ScaledPrice, ScaledPrice, std::greater<ScaledPrice>>;
+    using AskMap = PmrMap<ScaledPrice, ScaledPrice>;
     using LevelPair = std::pair<ScaledPrice, ScaledPrice>;
     using OrderRecord =
         std::tuple<Side, ScaledPrice, uint32_t>; // (side, price, size)
 
-    std::pmr::memory_resource* mr_;
+#if CMF_HAS_STD_PMR
+    MemoryResource* mr_;
+#endif
     BidMap bids_;
     AskMap asks_;
-    std::pmr::unordered_map<uint64_t, OrderRecord> order_index_;
-    mutable std::pmr::vector<LevelPair> levels_cache_;
+    PmrUnorderedMap<uint64_t, OrderRecord> order_index_;
+    mutable PmrVector<LevelPair> levels_cache_;
 
   public:
-    explicit MapOrderBook(
-        std::pmr::memory_resource* mr = std::pmr::get_default_resource())
+#if CMF_HAS_STD_PMR
+    explicit MapOrderBook(MemoryResource* mr = default_memory_resource())
         : mr_(mr), bids_{mr_}, asks_{mr_}, order_index_{mr_}, levels_cache_{mr_}
     {
     }
+#else
+    MapOrderBook() = default;
+#endif
 
   protected:
     void apply_impl(const MarketDataEvent& event);

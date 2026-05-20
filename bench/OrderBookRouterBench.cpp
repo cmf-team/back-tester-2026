@@ -1,9 +1,10 @@
 #include "common/MarketDataEvent.hpp"
+#include "order_book/MapOrderBook.hpp"
+#include "order_book/PmrCompat.hpp"
 #include "order_book/ShardedOrderBookRouter.hpp"
 #include "order_book/SimpleOrderBookRouter.hpp"
 #include <benchmark/benchmark.h>
 
-#include <memory_resource>
 #include <vector>
 
 // Type aliases to avoid macro issues with commas in template args
@@ -86,10 +87,15 @@ struct SimpleRouterDefaultResourceFactory
 {
     static auto create()
     {
-        return SimpleRouterBench(std::pmr::get_default_resource());
+#if CMF_HAS_STD_PMR
+        return SimpleRouterBench(cmf::default_memory_resource());
+#else
+        return SimpleRouterBench();
+#endif
     }
 };
 
+#if CMF_HAS_STD_PMR
 struct SimpleRouterMonotonicPRFactory
 {
     static auto create()
@@ -98,6 +104,7 @@ struct SimpleRouterMonotonicPRFactory
         return SimpleRouterBench(&pool);
     }
 };
+#endif
 
 // Factory methods for ShardedOrderBookRouter (uses default resource)
 struct ShardedRouter2Factory
@@ -119,6 +126,8 @@ struct ShardedRouter4Factory
         ->DisplayAggregatesOnly()
 
 REGISTER_ROUTER_BENCH(SimpleRouterDefaultResourceFactory);
+#if CMF_HAS_STD_PMR
 REGISTER_ROUTER_BENCH(SimpleRouterMonotonicPRFactory);
+#endif
 REGISTER_ROUTER_BENCH(ShardedRouter2Factory);
 REGISTER_ROUTER_BENCH(ShardedRouter4Factory);

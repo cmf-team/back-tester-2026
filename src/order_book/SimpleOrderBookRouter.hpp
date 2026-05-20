@@ -2,12 +2,11 @@
 
 #include "LimitOrderBook.hpp"
 #include "OrderBookRouter.hpp"
-#include <memory_resource>
+#include "PmrCompat.hpp"
 #include <ostream>
 #include <sstream>
 #include <stdexcept>
 #include <string>
-#include <unordered_map>
 
 namespace cmf
 {
@@ -18,14 +17,21 @@ class SimpleOrderBookRouter
     friend class OrderBookRouter<SimpleOrderBookRouter<BookType>>;
 
   private:
-    std::pmr::memory_resource* mr_;
-    std::pmr::unordered_map<uint32_t, BookType> order_books_;
-    std::pmr::unordered_map<uint64_t, uint32_t> order_to_instrument_;
+#if CMF_HAS_STD_PMR
+    MemoryResource* mr_;
+#endif
+    PmrUnorderedMap<uint32_t, BookType> order_books_;
+    PmrUnorderedMap<uint64_t, uint32_t> order_to_instrument_;
 
   public:
-    explicit SimpleOrderBookRouter(
-        std::pmr::memory_resource* mr = std::pmr::get_default_resource())
-        : mr_(mr), order_books_{mr_}, order_to_instrument_{mr_} {}
+#if CMF_HAS_STD_PMR
+    explicit SimpleOrderBookRouter(MemoryResource* mr = default_memory_resource())
+        : mr_(mr), order_books_{mr_}, order_to_instrument_{mr_}
+    {
+    }
+#else
+    SimpleOrderBookRouter() = default;
+#endif
 
     void apply_impl(const MarketDataEvent& e)
     {
@@ -47,7 +53,7 @@ class SimpleOrderBookRouter
     void print_snapshot_impl(std::ostream& out,
                              const size_t group_by_levels) const
     {
-        for (auto [instrument_id, order_book] : order_books_)
+        for (const auto& [instrument_id, order_book] : order_books_)
         {
             const auto best_bid = order_book.best_price(Side::Buy);
             const auto best_ask = order_book.best_price(Side::Sell);
@@ -100,7 +106,7 @@ class SimpleOrderBookRouter
     snapshot_as_string_impl(const std::size_t group_by_levels) const
     {
         std::ostringstream oss;
-        for (auto& [instrument_id, order_book] : order_books_)
+        for (const auto& [instrument_id, order_book] : order_books_)
         {
             const auto best_bid = order_book.best_price(Side::Buy);
             const auto best_ask = order_book.best_price(Side::Sell);
